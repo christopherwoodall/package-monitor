@@ -216,6 +216,22 @@ you install or remove the `@reboot` entry without touching the terminal.
 
 ---
 
+## Screenshots
+
+### Web Dashboard
+
+![Dashboard](.github/dashboard.png)
+
+The dashboard provides a live view of all analyzed releases with filtering by ecosystem and verdict status.
+
+### Analysis Report
+
+![Report](.github/report.png)
+
+Each release generates a detailed Markdown report with the AI analysis results and any detected anomalies.
+
+---
+
 ## Plugin System
 
 New collectors and notifiers self-register via `importlib.metadata` entry
