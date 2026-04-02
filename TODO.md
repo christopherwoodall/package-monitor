@@ -10,41 +10,7 @@ and acceptable patterns are excluded.
 
 ---
 
-## 1. MISSING FILE: `src/scm/_prompt.py`
-
-**Severity: Critical**
-
-AGENTS.md states:
-
-> `Config.analyzer_prompt` (default = `ANALYSIS_PROMPT_TEMPLATE` from `scm._prompt`)
-> The full `ANALYSIS_PROMPT_TEMPLATE` string lives in `src/scm/_prompt.py`.
-
-The file does not exist. As a consequence:
-
-- `src/scm/config.py:100` — `analyzer_prompt: str = ""` (wrong default; should be
-  `ANALYSIS_PROMPT_TEMPLATE`)
-- The system only works in practice because `config.yaml` supplies the prompt at
-  runtime. Without `config.yaml`, `validate_runtime_config()` raises `ConfigError`
-  with the message `"analyzer_prompt must not be empty"`.
-
-**Fix required:**
-1. Create `src/scm/_prompt.py` containing `ANALYSIS_PROMPT_TEMPLATE` (copy the
-   prompt from `config.yaml`'s `analyzer.prompt` field).
-2. In `src/scm/config.py`, add:
-   ```python
-   from scm._prompt import ANALYSIS_PROMPT_TEMPLATE
-   ```
-   and change line 100 to:
-   ```python
-   analyzer_prompt: str = field(default_factory=lambda: ANALYSIS_PROMPT_TEMPLATE)
-   ```
-3. Update `tests/test_config.py:359-361` — `test_load_config_defaults_include_analyzer_prompt`
-   currently asserts `cfg.analyzer_prompt == ""`. It must be updated to assert
-   `cfg.analyzer_prompt == ANALYSIS_PROMPT_TEMPLATE`.
-
----
-
-## 2. LINT VIOLATIONS — unused imports (`ruff F401`) and ambiguous name (`E741`)
+## 1. LINT VIOLATIONS — unused imports (`ruff F401`) and ambiguous name (`E741`)
 
 **Severity: High** — AGENTS.md requires `package-monitor-lint` to be clean.
 
@@ -79,7 +45,7 @@ remove or use the `release` variable at `tests/test_orchestrator.py:250`.
 
 ---
 
-## 3. TYPE CHECKER VIOLATIONS — `pyright` errors
+## 2. TYPE CHECKER VIOLATIONS — `pyright` errors
 
 **Severity: High** — AGENTS.md requires `package-monitor-typecheck` to be clean.
 
@@ -113,7 +79,7 @@ tweet_id = response.data["id"]
 
 ---
 
-## 4. LOUDNESS VIOLATION — `print()` in library functions
+## 3. LOUDNESS VIOLATION — `print()` in library functions
 
 **Severity: Medium**
 
@@ -136,7 +102,7 @@ CLI entrypoints and are **not** violations.
 
 ---
 
-## 5. MISSING DOCSTRING — `strip_ansi()` in `src/scm/analyzer.py`
+## 4. MISSING DOCSTRING — `strip_ansi()` in `src/scm/analyzer.py`
 
 **Severity: Low**
 
@@ -156,8 +122,7 @@ def strip_ansi(text: str) -> str:
 
 | # | File(s) | Directive | Severity |
 |---|---------|-----------|----------|
-| 1 | `src/scm/_prompt.py` (missing), `src/scm/config.py:100`, `tests/test_config.py:359` | `Config.analyzer_prompt` default must come from `scm._prompt.ANALYSIS_PROMPT_TEMPLATE` | **Critical** |
-| 2 | 3 source files + 13 test files | `ruff` lint must be clean (F401 unused imports, F841 unused var, E741 ambiguous name) | **High** |
-| 3 | `src/scm/dashboard/app.py` (18 errors), `src/scm/notifiers/twitter.py:109` | `pyright` type checks must pass | **High** |
-| 4 | `src/scm/scheduler.py:128,141,161,172` | No `print()` in library code | **Medium** |
-| 5 | `src/scm/analyzer.py:38` | Docstring required on all public functions | **Low** |
+| 1 | 3 source files + 13 test files | `ruff` lint must be clean (F401 unused imports, F841 unused var, E741 ambiguous name) | **High** |
+| 2 | `src/scm/dashboard/app.py` (18 errors), `src/scm/notifiers/twitter.py:109` | `pyright` type checks must pass | **High** |
+| 3 | `src/scm/scheduler.py:128,141,161,172` | No `print()` in library code | **Medium** |
+| 4 | `src/scm/analyzer.py:38` | Docstring required on all public functions | **Low** |
