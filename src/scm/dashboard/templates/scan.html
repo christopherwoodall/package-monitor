@@ -202,6 +202,13 @@
               <span><span class="font-mono text-indigo-400">--new</span> (all releases)</span>
             </label>
           </div>
+          <div id="monitor-new-limit-row" class="hidden">
+            <label class="block text-xs text-gray-400 uppercase tracking-widest mb-1">New-mode limit
+              <span class="text-gray-600 normal-case tracking-normal">(0 = unlimited)</span>
+            </label>
+            <input id="monitor-new-limit" type="number" value="100" min="0" max="100000"
+                   class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+          </div>
         </div>
 
         <div class="flex items-center gap-3">
@@ -342,6 +349,16 @@ function setScanningState(scanning) {
   });
 }
 
+// ── New-mode visibility toggles ──────────────────────────────────────────────
+
+document.getElementById('scan-new-only').addEventListener('change', (e) => {
+  document.getElementById('scan-new-limit-row').classList.toggle('hidden', !e.target.checked);
+});
+
+document.getElementById('monitor-new').addEventListener('change', (e) => {
+  document.getElementById('monitor-new-limit-row').classList.toggle('hidden', !e.target.checked);
+});
+
 // ── Scan form ────────────────────────────────────────────────────────────────
 
 document.getElementById('scan-form').addEventListener('submit', async (e) => {
@@ -364,6 +381,7 @@ document.getElementById('scan-form').addEventListener('submit', async (e) => {
     workers:         parseInt(form.workers.value, 10),
     analyze_timeout: parseInt(form.analyze_timeout.value, 10),
     new_only:        form.querySelector('input[name="new_only"]').checked,
+    new_limit:       parseInt(form.querySelector('input[name="new_limit"]').value, 10),
   };
 
   const resp = await fetch('/api/scan/start', {
@@ -520,6 +538,9 @@ async function installCron(type) {
     body.notifiers = document.getElementById('monitor-notifiers').value.trim();
     body.workers   = document.getElementById('monitor-workers').value;
     body.new       = document.getElementById('monitor-new').checked;
+    if (body.new) {
+      body.new_limit = parseInt(document.getElementById('monitor-new-limit').value, 10);
+    }
   } else {
     body.schedule = document.getElementById('dashboard-schedule').value.trim();
     body.port     = document.getElementById('dashboard-port').value;
