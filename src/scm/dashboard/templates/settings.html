@@ -32,6 +32,16 @@
         </div>
 
         <div>
+          <label class="block text-sm text-gray-400 mb-1" for="new_limit">
+            New-mode limit per poll cycle
+            <span class="text-gray-500">(0 = unlimited; only applies when top=0)</span>
+          </label>
+          <input id="new_limit" name="new_limit" type="number" min="0"
+            value="{{ cfg.new_limit }}"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+        <div>
           <label class="block text-sm text-gray-400 mb-1" for="interval">
             Poll interval (seconds)
           </label>
@@ -200,6 +210,7 @@
 
     const payload = {
       top:              parseInt(document.getElementById('top').value, 10),
+      new_limit:        parseInt(document.getElementById('new_limit').value, 10),
       interval:         parseInt(document.getElementById('interval').value, 10),
       workers:          parseInt(document.getElementById('workers').value, 10),
       analyze_timeout:  parseInt(document.getElementById('analyze_timeout').value, 10),
