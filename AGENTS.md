@@ -753,7 +753,6 @@ package-monitor/
 ├── reports/                    local notifier output (markdown files)
 └── src/scm/
     ├── __init__.py             __version__ = "0.1.0"
-    ├── _prompt.py              ANALYSIS_PROMPT_TEMPLATE constant (default analyzer prompt)
     ├── config.py               Config dataclass, load_config, apply_cli_overrides
     ├── models.py               4 dataclasses: Release, StoredArtifact, Verdict, Alert
     ├── db.py                   schema, CRUD, collector_state, tweet counts
