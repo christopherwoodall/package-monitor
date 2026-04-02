@@ -6,6 +6,7 @@ Subprocess only — knows nothing about storage, DB, or network.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -15,6 +16,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scm.models import Release, StoredArtifact, Verdict
+
+# Path to the default opencode config file (repo root)
+_DEFAULT_OPENCODE_CONFIG = Path(__file__).resolve().parents[2] / "opencode-yolo.json"
 
 if TYPE_CHECKING:
     from scm.scanners import Scanner
@@ -92,6 +96,10 @@ def run_opencode(
     log_dir = Path.home() / ".local" / "share" / "opencode" / "log"
     before: set[Path] = set(log_dir.glob("*.log")) if log_dir.is_dir() else set()
 
+    # Set up environment with OPENCODE_CONFIG pointing to the repo config file
+    env = os.environ.copy()
+    env["OPENCODE_CONFIG"] = str(_DEFAULT_OPENCODE_CONFIG)
+
     try:
         result = subprocess.run(  # noqa: S603
             cmd,
@@ -99,6 +107,7 @@ def run_opencode(
             text=True,
             timeout=timeout,
             cwd=str(workspace),
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         raise AnalyzerError(f"opencode timed out after {timeout}s") from exc
