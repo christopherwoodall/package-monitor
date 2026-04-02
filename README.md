@@ -31,6 +31,22 @@ uv sync --extra dev
 
 ---
 
+## Screenshots
+
+### Web Dashboard
+
+![Dashboard](.github/dashboard.png)
+
+The dashboard provides a live view of all analyzed releases with filtering by ecosystem and verdict status.
+
+### Analysis Report
+
+![Report](.github/report.png)
+
+Each release generates a detailed Markdown report with the AI analysis results and any detected anomalies.
+
+---
+
 ## CLI — Monitor
 
 ### One-shot poll (top 10 packages, both ecosystems)
@@ -213,22 +229,6 @@ you install or remove the `@reboot` entry without touching the terminal.
 
 > **Note:** `@reboot` runs once per login session on macOS. On Linux servers
 > it runs once per boot. Both behaviours are correct for a persistent service.
-
----
-
-## Screenshots
-
-### Web Dashboard
-
-![Dashboard](.github/dashboard.png)
-
-The dashboard provides a live view of all analyzed releases with filtering by ecosystem and verdict status.
-
-### Analysis Report
-
-![Report](.github/report.png)
-
-Each release generates a detailed Markdown report with the AI analysis results and any detected anomalies.
 
 ---
 
