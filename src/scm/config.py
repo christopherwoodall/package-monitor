@@ -41,6 +41,7 @@ _TOP_LEVEL_KEYS: frozenset[str] = frozenset(
         "db",
         "top",
         "new",
+        "new_limit",
         "interval",
         "once",
         "ecosystems",
@@ -73,6 +74,7 @@ class Config:
     db: str = "scm.db"
     top: int = 1000
     new: bool = False
+    new_limit: int = 100  # max releases to yield per poll in --new mode (0 = unlimited)
     interval: int = 300
     once: bool = False
     ecosystems: list[str] = field(default_factory=lambda: ["npm", "pypi"])
@@ -201,6 +203,8 @@ def _build_config(raw: dict) -> Config:
         if bool(raw["new"]):
             cfg.top = 0
             cfg.new = True
+    if "new_limit" in raw:
+        cfg.new_limit = int(raw["new_limit"])
     if "interval" in raw:
         cfg.interval = int(raw["interval"])
     if "once" in raw:
@@ -282,6 +286,8 @@ def apply_cli_overrides(cfg: Config, args: argparse.Namespace) -> Config:
     if _is_set(args, "new") and args.new:
         cfg.top = 0
         cfg.new = True
+    if _is_set(args, "new_limit"):
+        cfg.new_limit = args.new_limit
     if _is_set(args, "interval"):
         cfg.interval = args.interval
     if _is_set(args, "once") and args.once:

@@ -23,13 +23,16 @@ class Collector(ABC):
     ecosystem: str  # set in every subclass
 
     @abstractmethod
-    def load_watchlist(self, top_n: int) -> None:
+    def load_watchlist(self, top_n: int, new_limit: int = 0) -> None:
         """Fetch and cache the top-N packages to watch.
 
         When top_n == 0 the watchlist filter is disabled — every newly
         published package is a candidate.  Implementations must set an
         internal sentinel (e.g. ``_watchlist = None``) and skip the
         watchlist download entirely in this mode.
+
+        new_limit caps how many releases are yielded per poll cycle when
+        top_n == 0 (--new mode).  0 means unlimited.
 
         Raises WatchlistError on any failure — no silent fallback.
         """

@@ -52,6 +52,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Watch all newly published releases regardless of download rank (sets --top 0)",
     )
     p.add_argument(
+        "--new-limit",
+        type=int,
+        default=_UNSET,
+        dest="new_limit",
+        help=(
+            "Max releases to process per poll cycle in --new mode "
+            "(0 = unlimited, default 100)"
+        ),
+    )
+    p.add_argument(
         "--interval",
         type=int,
         default=_UNSET,
@@ -220,7 +230,7 @@ def main(argv: list[str] | None = None) -> None:
     for eco in cfg.ecosystems:
         collector = available_collectors[eco]()
         try:
-            collector.load_watchlist(cfg.top)
+            collector.load_watchlist(cfg.top, new_limit=cfg.new_limit)
         except Exception as exc:
             log.error("failed to load watchlist for %r: %s", eco, exc)
             sys.exit(1)

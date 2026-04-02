@@ -351,6 +351,44 @@ def test_poll_ignores_packages_not_in_watchlist(mocker):
     assert releases == []
 
 
+def test_poll_new_mode_watchlist_none_passes_all_packages(mocker):
+    """When _watchlist is None (--new mode), all packages in the changes feed are yielded."""
+    c = _make_collector()
+    c._last_seq = 1_000
+    c._poll_epoch = 0.0
+    c._watchlist = None  # --new mode
+
+    head_seq = 1_001
+    changes_data = {
+        "results": [
+            {"id": "some-obscure-pkg", "seq": 1_001, "changes": []},
+        ],
+        "last_seq": 1_001,
+    }
+    packument_data = _packument_with_versions({"1.0.0": "2024-06-01T12:00:00.000Z"})
+
+    call_count = 0
+
+    def fake_urlopen(req_or_url, timeout=None):
+        nonlocal call_count
+        call_count += 1
+        url = getattr(req_or_url, "full_url", None) or str(req_or_url)
+        if call_count == 1:
+            return _FakeResp(json.dumps({"update_seq": head_seq}).encode())
+        if "_changes" in url:
+            return _FakeResp(json.dumps(changes_data).encode())
+        return _FakeResp(packument_data)
+
+    mocker.patch("urllib.request.urlopen", side_effect=fake_urlopen)
+
+    releases = list(c.poll())
+
+    # Package is NOT in any watchlist but must still be yielded in --new mode
+    assert len(releases) == 1
+    assert releases[0].package == "some-obscure-pkg"
+    assert releases[0].rank == 0  # no rank in --new mode
+
+
 # ---------------------------------------------------------------------------
 # get_previous_version
 # ---------------------------------------------------------------------------

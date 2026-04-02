@@ -60,6 +60,7 @@ class ScanManager:
         db_path: Path,
         ecosystems: list[str],
         top_n: int = 1000,
+        new_limit: int = 100,
         workers: int = 4,
         analyze_timeout: int = 300,
         notifier_names: list[str] | None = None,
@@ -74,6 +75,7 @@ class ScanManager:
             db_path:          Path to the SQLite database.
             ecosystems:       List of ecosystem names to scan.
             top_n:            Number of top packages to watch per ecosystem.
+            new_limit:        Max releases per poll cycle when top_n==0 (0=unlimited).
             workers:          Parallel release-processing threads per ecosystem.
             analyze_timeout:  Per-release opencode timeout in seconds.
             notifier_names:   Notifier names to use (default: ["local"]).
@@ -150,7 +152,7 @@ class ScanManager:
         for eco in ecosystems:
             try:
                 collector = available[eco]()
-                collector.load_watchlist(top_n)
+                collector.load_watchlist(top_n, new_limit=new_limit)
                 collectors.append(collector)
                 self._append_log(
                     f"[{eco}] watchlist loaded "

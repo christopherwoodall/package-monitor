@@ -51,17 +51,20 @@ class PypiCollector(Collector):
             dict[str, int] | None
         ) = {}  # name → rank (1-based); None = all packages
         self._last_serial: int = 0
+        self._new_limit: int = 0  # 0 = unlimited; only applied when _watchlist is None
 
     # ------------------------------------------------------------------
     # load_watchlist
     # ------------------------------------------------------------------
 
-    def load_watchlist(self, top_n: int) -> None:
+    def load_watchlist(self, top_n: int, new_limit: int = 0) -> None:
         """Fetch top-N PyPI packages by monthly downloads and build _watchlist.
 
         When top_n == 0, skip the download entirely and set _watchlist = None
-        (all packages with an sdist are candidates).
+        (all packages with an sdist are candidates).  new_limit caps how many
+        releases are yielded per poll cycle in this mode (0 = unlimited).
         """
+        self._new_limit = new_limit
         if top_n == 0:
             self._watchlist = None
             log.info(
@@ -175,6 +178,11 @@ class PypiCollector(Collector):
             # otherwise filter to watchlist.
             if self._watchlist is not None and pkg_lower not in self._watchlist:
                 continue
+
+            # Apply new_limit cap (only meaningful when _watchlist is None)
+            if self._new_limit > 0 and yielded >= self._new_limit:
+                log.info("PyPI new_limit=%d reached — stopping early", self._new_limit)
+                break
 
             rank = self._watchlist[pkg_lower] if self._watchlist is not None else 0
 

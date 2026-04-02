@@ -210,6 +210,7 @@ def create_app(
         # new_only=true (or top_n explicitly 0) means watch all new releases
         if data.get("new_only") or top_n == 0:
             top_n = 0
+        new_limit = int(data.get("new_limit", 100))
         workers = int(data.get("workers", 4))
         analyze_timeout = int(data.get("analyze_timeout", 300))
 
@@ -223,6 +224,7 @@ def create_app(
             db_path=app.config["DB_PATH"],
             ecosystems=ecosystems,
             top_n=top_n,
+            new_limit=new_limit,
             workers=workers,
             analyze_timeout=analyze_timeout,
             notifier_names=notifier_names,
@@ -372,6 +374,8 @@ def create_app(
                     extra_parts += ["--db", str(data["db"])]
                 if data.get("new"):
                     extra_parts += ["--new"]
+                    if data.get("new_limit") is not None:
+                        extra_parts += ["--new-limit", str(data["new_limit"])]
                 elif data.get("top"):
                     extra_parts += ["--top", str(data["top"])]
                 if data.get("notifiers"):

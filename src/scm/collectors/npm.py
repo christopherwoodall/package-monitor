@@ -44,17 +44,20 @@ class NpmCollector(Collector):
         ) = {}  # name.lower() → rank (1-based); None = all packages
         self._last_seq: int = 0
         self._poll_epoch: float = 0.0  # Unix timestamp of last poll start
+        self._new_limit: int = 0  # 0 = unlimited; only applied when _watchlist is None
 
     # -------------------------------------------------------------------------
     # Watchlist
     # -------------------------------------------------------------------------
 
-    def load_watchlist(self, top_n: int) -> None:
+    def load_watchlist(self, top_n: int, new_limit: int = 0) -> None:
         """Download download-counts tarball and build rank map from counts.json.
 
         When top_n == 0, skip the download entirely and set _watchlist = None
-        (all packages are candidates).
+        (all packages are candidates).  new_limit caps how many releases are
+        yielded per poll cycle in this mode (0 = unlimited).
         """
+        self._new_limit = new_limit
         if top_n == 0:
             self._watchlist = None
             log.info(
@@ -288,6 +291,7 @@ class NpmCollector(Collector):
             len(seen_packages),
         )
 
+        yielded = 0
         for pkg in seen_packages:
             try:
                 new_versions = self._detect_new_versions(pkg, self._poll_epoch)
@@ -301,6 +305,13 @@ class NpmCollector(Collector):
                 else 0
             )
             for ver in new_versions:
+                if self._new_limit > 0 and yielded >= self._new_limit:
+                    log.info(
+                        "npm new_limit=%d reached — stopping early", self._new_limit
+                    )
+                    self._last_seq = last_seq_seen
+                    self._poll_epoch = cycle_start
+                    return
                 log.info("new version detected  %s@%s  rank=#%d", pkg, ver, rank)
                 yield Release(
                     ecosystem="npm",
@@ -310,6 +321,7 @@ class NpmCollector(Collector):
                     rank=rank,
                     discovered_at=datetime.now(timezone.utc),
                 )
+                yielded += 1
 
         self._last_seq = last_seq_seen
         self._poll_epoch = cycle_start

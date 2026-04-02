@@ -183,6 +183,15 @@ def test_load_watchlist_raises_on_bad_json_shape(mocker):
         c.load_watchlist(top_n=10)
 
 
+def test_load_watchlist_top_n_zero_sets_watchlist_none(mocker):
+    """load_watchlist(0) must set _watchlist=None without making any network calls."""
+    urlopen_mock = mocker.patch("urllib.request.urlopen")
+    c = _make_collector()
+    c.load_watchlist(top_n=0)
+    assert c._watchlist is None
+    urlopen_mock.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # poll — first run (serial == 0)
 # ---------------------------------------------------------------------------
@@ -294,6 +303,26 @@ def test_poll_skips_packages_not_in_watchlist(mocker):
 
     releases = list(c.poll())
     assert releases == []
+
+
+def test_poll_new_mode_watchlist_none_passes_all_packages(mocker):
+    """When _watchlist is None (--new mode), packages outside the top list are yielded."""
+    c = _make_collector()
+    c._watchlist = None  # --new mode
+    c._last_serial = 999_000
+
+    entries = [_make_changelog_entry("obscure-package", "0.1.0", 999_050)]
+    version_meta = _pypi_version_meta("obscure-package", "0.1.0")
+
+    _mock_xmlrpc(mocker, head_serial=999_100, entries=entries)
+    mocker.patch("urllib.request.urlopen", return_value=_FakeResp(version_meta))
+
+    releases = list(c.poll())
+
+    # Package is NOT in any watchlist but must still be yielded in --new mode
+    assert len(releases) == 1
+    assert releases[0].package == "obscure-package"
+    assert releases[0].rank == 0  # no rank in --new mode
 
 
 def test_poll_deduplicates_changelog_entries(mocker):

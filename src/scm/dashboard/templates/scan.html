@@ -74,6 +74,14 @@
         </label>
       </div>
 
+      <div id="scan-new-limit-row" class="hidden">
+        <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">New-mode limit
+          <span class="text-gray-600 normal-case tracking-normal">(0 = unlimited)</span>
+        </label>
+        <input type="number" name="new_limit" value="100" min="0" max="100000"
+               class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-40 text-sm" />
+      </div>
+
       <div class="pt-2 flex items-center gap-3">
         <button type="submit" id="scan-btn"
                 class="bg-brand hover:bg-indigo-700 text-white text-sm px-6 py-2 rounded-md transition">
