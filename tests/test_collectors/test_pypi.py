@@ -325,6 +325,28 @@ def test_poll_new_mode_watchlist_none_passes_all_packages(mocker):
     assert releases[0].rank == 0  # no rank in --new mode
 
 
+def test_poll_new_mode_new_limit_caps_releases(mocker):
+    """When _watchlist is None and _new_limit=2, only 2 releases are yielded."""
+    c = _make_collector()
+    c._watchlist = None  # --new mode
+    c._new_limit = 2
+    c._last_serial = 999_000
+
+    # 5 distinct packages in the changelog
+    entries = [_make_changelog_entry(f"pkg{i}", "1.0.0", 999_050 + i) for i in range(5)]
+
+    _mock_xmlrpc(mocker, head_serial=999_100, entries=entries)
+    # Each urlopen call needs a fresh FakeResp so the BytesIO isn't exhausted
+    mocker.patch(
+        "urllib.request.urlopen",
+        side_effect=lambda *a, **kw: _FakeResp(_pypi_version_meta("pkg0", "1.0.0")),
+    )
+
+    releases = list(c.poll())
+
+    assert len(releases) == 2
+
+
 def test_poll_deduplicates_changelog_entries(mocker):
     """Same (package, version) appearing twice should yield only one Release."""
     c = _make_collector()
