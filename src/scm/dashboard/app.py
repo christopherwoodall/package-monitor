@@ -563,6 +563,7 @@ def create_app(
         # Apply submitted values — only known safe fields
         _FIELD_MAP: dict[str, str] = {
             "top": "top",
+            "new_limit": "new_limit",
             "interval": "interval",
             "workers": "workers",
             "analyze_timeout": "analyze_timeout",
@@ -579,6 +580,7 @@ def create_app(
                 val = data[key]
                 if attr in (
                     "top",
+                    "new_limit",
                     "interval",
                     "workers",
                     "analyze_timeout",
