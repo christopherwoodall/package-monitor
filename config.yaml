@@ -340,15 +340,63 @@ analyzer:
     | `.pth` file with `import` executing network/exec code | malicious | high |
     | `process.env` bulk collection + outbound HTTP to IP | malicious | high |
     | Raw IP address outbound connection + credential file reads | malicious | high |
-    | Encoded payload with eval/exec | malicious | high |
     | Lifecycle hook modification alone (no payload visible) | unknown | medium |
-    | New dependency added (no obvious purpose, no visible payload) | unknown | medium |
+    | New dependency from a different scope/org with no changelog mention | unknown | high |
+    | New dependency from a different scope/org with changelog mention | unknown | medium |
     | Network call to unknown hostname, no obfuscation | unknown | medium |
     | Environment variable read + logging (no exfiltration) | unknown | low |
     | New binary file added (no source, no exec chain visible) | unknown | low |
     | Single suspicious-looking function in an otherwise clean diff | unknown | low |
+    | Version bump + changelog, dependency from same npm scope or org | benign | medium |
+    | Version bump + changelog, no dependency changes | benign | high |
     | Clean refactor, new feature, dependency update to known package | benign | high |
 
+    When the diff is truncated: note this explicitly in your reasoning and lower
+    confidence by one level, since the truncated portion may contain the payload.
+
+    ## Dependency classification
+
+    When a diff adds or bumps a dependency, classify it before forming a verdict:
+
+    SAME-SCOPE BUMP (low risk)
+    A dependency update where the package being bumped shares the same npm scope
+    or organization as the package under review. Example: @platformos/foo bumping
+    @platformos/bar from 0.0.16 to 0.0.17. This is a routine coordinated release.
+    A matching changelog entry and no other code changes → benign/medium.
+
+    KNOWN-PACKAGE BUMP (low risk)
+    A dependency update to a package with high weekly downloads, a long publish
+    history, and a name that matches its stated purpose. Example: lodash 4.17.20
+    → 4.17.21. Treat as benign unless the diff also shows code changes that are
+    suspicious.
+
+    CROSS-SCOPE INJECTION (high risk — Axios 2026 pattern)
+    A new or newly bumped dependency where the package name is unrelated to the
+    parent package's scope or organization, has low or no download history, or
+    did not previously exist in the dependency tree. This is the primary attack
+    vector for transitive payload delivery. Treat as unknown/high regardless of
+    how clean the rest of the diff looks.
+
+    LOCK FILE DIVERGENCE (high risk)
+    A dependency appears in package-lock.json or yarn.lock but not in
+    package.json, or vice versa. This indicates lock file poisoning — a
+    dependency is being pulled without explicit declaration.
+
+    ## When the diff is a version bump only
+
+    If the entire diff consists of a version number change and a changelog update
+    with no other code changes, your Summary line must state:
+
+    1. The exact dependency name, old version, and new version if a dep was bumped
+    2. Which classification above applies (same-scope, known-package, etc.)
+    3. Why you cannot or can clear it
+
+    A clean small diff is not automatically suspicious. The Axios 2026 attack
+    was notable precisely because it was unusual — most version bumps are routine.
+    Do not inflate confidence or suspicion to compensate for incomplete information.
+    Report what you know, classify what you can, and be explicit about what you
+    cannot verify.
+    
     **When in doubt, ask what the attacker assumed you would miss. If the answer is "this exact thing," that's your verdict.**
 
     When the findings file is truncated: note this explicitly in your reasoning and lower confidence by one level, since the truncated portion may contain the payload.
