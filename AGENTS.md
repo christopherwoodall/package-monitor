@@ -57,6 +57,9 @@ uv run package-monitor --top 100 --interval 300
 # Watch ALL newly published releases regardless of download rank
 uv run package-monitor --new --once
 
+# Watch ALL new releases, but process at most 50 per poll cycle
+uv run package-monitor --new --new-limit 50 --once
+
 # With Twitter notifications
 uv run package-monitor --once --notifiers local,twitter --top 10
 
@@ -460,6 +463,7 @@ CLI flags  >  config.yaml  >  built-in defaults in Config dataclass
 db: scm.db
 top: 1000        # set to 0 (or use new: true) to watch all new releases
 new: false       # true → sets top=0; equivalent to --new CLI flag
+new_limit: 100   # max releases yielded per poll cycle in --new mode (0 = unlimited)
 interval: 300
 once: false
 ecosystems: [npm, pypi]
@@ -861,4 +865,4 @@ analysis without requiring them to parse Python source directly.
 **Update this file in the same commit that introduces the change it describes.
 Not after. Not in a follow-up. In the same commit.**
 
-*Last updated: 2026-04-02 — Promoted tooling/path/concurrency lessons to Hard Constraints; removed differ.py, added extractor.py and scanners/ to module table and File Map; corrected models.py count (4 dataclasses, no DiffReport); removed Threading max_diff_bytes/context_lines subsection and Differ settings section; condensed gap-reset/first-run collector docs to mechanism descriptions; stripped retrospective filler from Lessons*
+*Last updated: 2026-04-02 — Added `--new-limit` / `new_limit` feature: caps releases yielded per poll cycle in `--new` mode; documented in CLI examples and config.yaml structure; tests added for cap behaviour in both npm and PyPI collectors; settings page and scan UI wired up*
