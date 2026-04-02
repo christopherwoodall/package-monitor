@@ -277,13 +277,6 @@ and narrow.
 
 Counting from the wrong end crashes on startup. Count carefully.
 
-### Why `_prompt.py` exists
-
-The full `ANALYSIS_PROMPT_TEMPLATE` string lives in `src/scm/_prompt.py`.
-`config.py` needs the default prompt value at import time, and `analyzer.py`
-also needs it — both import from the leaf module `_prompt.py` without creating
-a cycle.
-
 ---
 
 ## Hard Constraints
@@ -492,7 +485,7 @@ Unknown keys at any level cause `ConfigError` at startup.
 ### Threading analyzer_model and analyzer_prompt
 
 `Config.analyzer_model` (default `"github-copilot/claude-sonnet-4.6"`) and
-`Config.analyzer_prompt` (default = `ANALYSIS_PROMPT_TEMPLATE` from `scm._prompt`)
+`Config.analyzer_prompt` (default = `""` — the prompt must be supplied via `config.yaml`)
 are threaded through:
 `Config` → `cli.py`/`main()` → `orchestrator.run_multi()` →
 `_run_collector_thread()` → `run()` → `_process_release()` →
