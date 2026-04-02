@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}{{ package }} ({{ ecosystem }}) — Package Monitor{% endblock %}
+
+{% block content %}
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="mb-6 flex items-start justify-between">
+  <div>
+    <p class="text-xs text-gray-500 mb-1">
+      <a href="/" class="hover:text-gray-300">Dashboard</a>
+      <span class="mx-1">/</span>
+      <span class="text-gray-400">{{ ecosystem }}</span>
+    </p>
+    <h1 class="text-2xl font-bold text-gray-100">{{ package }}</h1>
+    <p class="text-sm text-gray-500 mt-0.5">ecosystem: {{ ecosystem }}</p>
+  </div>
+  <span class="text-xs text-gray-600">{{ history | length }} version(s) scanned</span>
+</div>
+
+{% if not history %}
+<p class="text-gray-600 text-center py-10">No scan history for this package.</p>
+{% else %}
+
+<!-- ── History table ──────────────────────────────────────────────────── -->
+<div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
+        <th class="px-4 py-2 text-left">Version</th>
+        <th class="px-4 py-2 text-left">Result</th>
+        <th class="px-4 py-2 text-left">Confidence</th>
+        <th class="px-4 py-2 text-left">Summary</th>
+        <th class="px-4 py-2 text-left">Analyzed</th>
+        <th class="px-4 py-2 text-left">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set BADGE = {
+        'malicious': 'bg-red-900 text-red-300',
+        'benign':    'bg-green-900 text-green-300',
+        'unknown':   'bg-yellow-900 text-yellow-300',
+        'error':     'bg-gray-700 text-gray-300',
+      } %}
+      {% for row in history %}
+      <tr class="border-t border-gray-800 hover:bg-gray-800/50 transition"
+          data-idx="{{ loop.index0 }}">
+        <td class="px-4 py-2 text-gray-200 font-semibold">{{ row.version }}</td>
+        <td class="px-4 py-2">
+          <span class="text-xs px-2 py-0.5 rounded font-semibold {{ BADGE.get(row.result, 'bg-gray-700 text-gray-400') }}">
+            {{ row.result }}
+          </span>
+        </td>
+        <td class="px-4 py-2 text-gray-400">{{ row.confidence }}</td>
+        <td class="px-4 py-2 text-gray-500 truncate max-w-xs" title="{{ row.summary }}">
+          {{ row.summary[:80] }}{% if row.summary and row.summary | length > 80 %}…{% endif %}
+        </td>
+        <td class="px-4 py-2 text-gray-600 text-xs">
+          {{ row.analyzed_at[:16].replace('T', ' ') if row.analyzed_at else '—' }}
+        </td>
+        <td class="px-4 py-2">
+          <div class="flex items-center gap-3">
+            {% if row.report_path %}
+            <button class="view-report text-base leading-none hover:opacity-70 transition"
+                    title="View diff report"
+                    data-path="{{ row.report_path }}">📄</button>
+            {% else %}
+            <span class="text-base leading-none opacity-20" title="No report available">📄</span>
+            {% endif %}
+
+            {% if row.new_path %}
+            <a class="text-base leading-none hover:opacity-70 transition"
+               title="Download tarball"
+               href="/binary?path={{ row.new_path | urlencode }}">⬇️</a>
+            {% else %}
+            <span class="text-base leading-none opacity-20" title="Tarball not available">⬇️</span>
+            {% endif %}
+
+            <button class="rescan-btn text-base leading-none hover:opacity-70 transition"
+                    title="Re-scan this version"
+                    data-version="{{ row.version }}">🔄</button>
+
+            {% if row.log_path %}
+            <button class="view-log text-base leading-none hover:opacity-70 transition"
+                    title="View agent log"
+                    data-path="{{ row.log_path }}">📋</button>
+            {% else %}
+            <span class="text-base leading-none opacity-20" title="No agent log available">📋</span>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Force-scan status ──────────────────────────────────────────────────── -->
+<div id="force-status" class="hidden mt-3 text-sm text-gray-500"></div>
+
+<!-- ── Report modal ───────────────────────────────────────────────────── -->
+<div id="report-modal"
+     class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6">
+  <div class="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-4xl max-h-[80vh] flex flex-col">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+      <span id="modal-title" class="text-sm text-gray-300 font-semibold">Diff Report</span>
+      <button id="modal-close" class="text-gray-500 hover:text-gray-200 text-xl leading-none">&times;</button>
+    </div>
+    <pre id="report-content"
+         class="flex-1 overflow-auto px-5 py-4 text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">
+Loading…</pre>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Report modal ─────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.view-report').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const path = btn.dataset.path;
+    const modal = document.getElementById('report-modal');
+    const content = document.getElementById('report-content');
+    const title = document.getElementById('modal-title');
+    title.textContent = 'Diff Report';
+    content.textContent = 'Loading…';
+    modal.classList.remove('hidden');
+    try {
+      const resp = await fetch(`/report?path=${encodeURIComponent(path)}`);
+      if (resp.ok) {
+        content.textContent = await resp.text();
+      } else {
+        content.textContent = `Error ${resp.status}: ${await resp.text()}`;
+      }
+    } catch (err) {
+      content.textContent = `Failed to load: ${err}`;
+    }
+  });
+});
+
+// ── Agent log modal ──────────────────────────────────────────────────────────
+
+document.querySelectorAll('.view-log').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const path = btn.dataset.path;
+    const modal = document.getElementById('report-modal');
+    const content = document.getElementById('report-content');
+    const title = document.getElementById('modal-title');
+    title.textContent = 'Agent Log';
+    content.textContent = 'Loading…';
+    modal.classList.remove('hidden');
+    try {
+      const resp = await fetch(`/log?path=${encodeURIComponent(path)}`);
+      if (resp.ok) {
+        content.textContent = await resp.text();
+      } else {
+        content.textContent = `Error ${resp.status}: ${await resp.text()}`;
+      }
+    } catch (err) {
+      content.textContent = `Failed to load: ${err}`;
+    }
+  });
+});
+
+document.getElementById('modal-close').addEventListener('click', () => {
+  document.getElementById('report-modal').classList.add('hidden');
+});
+
+document.getElementById('report-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
+// ── Force-scan ───────────────────────────────────────────────────────────────
+
+const ECOSYSTEM = {{ ecosystem | tojson }};
+const PACKAGE   = {{ package   | tojson }};
+
+let forceTimer = null;
+
+function setForceStatus(text, colour) {
+  const el = document.getElementById('force-status');
+  el.textContent = '';
+  el.className = `mt-3 text-sm ${colour}`;
+  if (text) {
+    el.classList.remove('hidden');
+    el.textContent = text;
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function setForceStatusHTML(html, colour) {
+  const el = document.getElementById('force-status');
+  el.className = `mt-3 text-sm ${colour}`;
+  el.classList.remove('hidden');
+  el.innerHTML = html;
+}
+
+function setRescanning(scanning) {
+  document.querySelectorAll('.rescan-btn').forEach(b => {
+    b.disabled = scanning;
+    b.classList.toggle('opacity-50', scanning);
+    b.classList.toggle('cursor-not-allowed', scanning);
+  });
+}
+
+async function pollForce() {
+  try {
+    const resp = await fetch('/api/scan/status');
+    const data = await resp.json();
+    if (data.status !== 'running') {
+      clearInterval(forceTimer);
+      forceTimer = null;
+      window.location.reload();
+    }
+  } catch (_) {
+    // network hiccup — keep polling
+  }
+}
+
+document.querySelectorAll('.rescan-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const version = btn.dataset.version;
+
+    const resp = await fetch('/api/scan/force', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ecosystem: ECOSYSTEM, package: PACKAGE, version }),
+    });
+
+    if (resp.status === 202) {
+      setForceStatus(`Scanning ${PACKAGE}@${version}…`, 'text-indigo-400');
+      setRescanning(true);
+      forceTimer = setInterval(pollForce, 2000);
+    } else if (resp.status === 409) {
+      setForceStatusHTML(
+        'A scan is already running — <a href="/scan" class="underline hover:text-indigo-300">view details</a>',
+        'text-yellow-400'
+      );
+    } else {
+      const data = await resp.json().catch(() => ({}));
+      setForceStatus(data.error || `Error ${resp.status}`, 'text-red-400');
+    }
+  });
+});
+</script>
+{% endblock %}

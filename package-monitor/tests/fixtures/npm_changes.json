@@ -1,0 +1,9 @@
+{
+  "results": [
+    {"id": "express",              "seq": 12345001, "changes": [{"rev": "1-abc"}]},
+    {"id": "lodash",               "seq": 12345002, "changes": [{"rev": "1-def"}]},
+    {"id": "_design/app",          "seq": 12345003, "changes": [{"rev": "1-ghi"}]},
+    {"id": "not-in-watchlist-xyz", "seq": 12345004, "changes": [{"rev": "1-jkl"}]}
+  ],
+  "last_seq": 12345004
+}

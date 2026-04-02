@@ -1,0 +1,24 @@
+{# Sidebar navigation partial — included by base.html.
+   Active state is determined server-side via request.endpoint.
+   Mobile: renders as a horizontal strip below the top nav.
+   md+:    renders as a vertical left sidebar.
+#}
+{%- set _ep = request.endpoint %}
+{%- set _nav_items = [
+  ("Dashboard", "/",         _ep in ("index", "package_detail")),
+  ("Scanners",  "/scanners", _ep == "scanners_page"),
+  ("Run Scan",  "/scan",     _ep == "scan_page"),
+  ("Settings",  "/settings", _ep == "settings_page"),
+] %}
+
+<aside class="w-full md:w-48 flex-shrink-0 bg-gray-900 border-b border-gray-800 md:border-b-0 md:border-r md:border-gray-800">
+  <nav class="flex flex-row md:flex-col px-2 py-2 gap-1">
+    {% for label, href, active in _nav_items %}
+      <a href="{{ href }}"
+         class="flex-1 md:flex-none px-3 py-2 rounded text-sm transition text-center md:text-left
+                {% if active %}text-brand font-semibold bg-gray-800{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-800/50{% endif %}">
+        {{ label }}
+      </a>
+    {% endfor %}
+  </nav>
+</aside>

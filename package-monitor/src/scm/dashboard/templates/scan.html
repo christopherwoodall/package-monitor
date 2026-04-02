@@ -1,0 +1,556 @@
+{% extends "base.html" %}
+{% block title %}Run Scan — Package Monitor{% endblock %}
+
+{% block content %}
+
+<div class="max-w-2xl space-y-10">
+
+  <!-- ── Section: Start scan ──────────────────────────────────────────────── -->
+  <section>
+    <h1 class="text-xl font-bold text-gray-100 mb-1">Run Scan</h1>
+    <p class="text-sm text-gray-500 mb-6">
+      Kick off a one-shot poll across selected ecosystems.
+      Each ecosystem runs in its own thread with its own DB connection.
+    </p>
+
+    <form id="scan-form" class="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-5">
+
+      <div>
+        <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Ecosystems</label>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" name="ecosystem" value="npm" checked class="accent-indigo-500" />
+            npm
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" name="ecosystem" value="pypi" checked class="accent-indigo-500" />
+            pypi
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Notifiers</label>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" name="notifier" value="local" checked class="accent-indigo-500" />
+            local
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" name="notifier" value="twitter" class="accent-indigo-500" />
+            twitter
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" name="notifier" value="slack" class="accent-indigo-500" />
+            slack
+          </label>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Top-N per ecosystem
+            <span class="text-gray-600 normal-case tracking-normal">(0 = all)</span>
+          </label>
+          <input type="number" name="top_n" value="100" min="0" max="10000"
+                 class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Workers</label>
+          <input type="number" name="workers" value="4" min="1" max="32"
+                 class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Timeout (s)</label>
+          <input type="number" name="analyze_timeout" value="300" min="10" max="3600"
+                 class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+        </div>
+      </div>
+
+      <div>
+        <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+          <input type="checkbox" name="new_only" id="scan-new-only" class="accent-indigo-500" />
+          <span><span class="font-mono text-indigo-400">--new</span> — watch all newly published releases (overrides Top-N)</span>
+        </label>
+      </div>
+
+      <div class="pt-2 flex items-center gap-3">
+        <button type="submit" id="scan-btn"
+                class="bg-brand hover:bg-indigo-700 text-white text-sm px-6 py-2 rounded-md transition">
+          Start Scan
+        </button>
+        <span id="scan-msg" class="text-sm text-gray-500"></span>
+      </div>
+    </form>
+  </section>
+
+  <!-- ── Section: Force-scan a package ────────────────────────────────────── -->
+  <section>
+    <h2 class="text-base font-semibold text-gray-200 mb-1">Force-scan a specific package</h2>
+    <p class="text-sm text-gray-500 mb-4">
+      Run the full diff + analysis pipeline on a single package@version, bypassing the collector poll.
+    </p>
+    <form id="force-form" class="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Ecosystem</label>
+          <select name="ecosystem"
+                  class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm">
+            <option value="npm">npm</option>
+            <option value="pypi">pypi</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Package</label>
+          <input type="text" name="package" placeholder="lodash"
+                 class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Version</label>
+          <input type="text" name="version" placeholder="4.17.22"
+                 class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+        </div>
+      </div>
+      <div class="flex items-center gap-3 pt-1">
+        <button type="submit" id="force-btn"
+                class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-5 py-2 rounded-md transition">
+          Force Scan
+        </button>
+        <span id="force-msg" class="text-sm text-gray-500"></span>
+      </div>
+    </form>
+  </section>
+
+  <!-- ── Section: Reset collector state ───────────────────────────────────── -->
+  <section>
+    <h2 class="text-base font-semibold text-gray-200 mb-1">Reset collector state</h2>
+    <p class="text-sm text-gray-500 mb-4">
+      Wipe the saved sequence/serial so the next scan performs a fresh 30-day lookback.
+      Useful when a scan yielded no results due to stale state.
+    </p>
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-6 flex flex-wrap items-center gap-3">
+      <button data-eco="npm" class="reset-btn bg-gray-800 hover:bg-gray-700 border border-gray-700
+              text-gray-300 text-sm px-4 py-1.5 rounded-md transition">
+        Reset npm state
+      </button>
+      <button data-eco="pypi" class="reset-btn bg-gray-800 hover:bg-gray-700 border border-gray-700
+              text-gray-300 text-sm px-4 py-1.5 rounded-md transition">
+        Reset pypi state
+      </button>
+      <button data-eco="npm,pypi" class="reset-btn bg-gray-800 hover:bg-gray-700 border border-gray-700
+              text-gray-300 text-sm px-4 py-1.5 rounded-md transition">
+        Reset all
+      </button>
+      <span id="reset-msg" class="text-sm text-gray-500"></span>
+    </div>
+  </section>
+
+  <!-- ── Section: Cron & service management ──────────────────────────────── -->
+  <section>
+    <h2 class="text-base font-semibold text-gray-200 mb-1">Cron &amp; Service Management</h2>
+    <p class="text-sm text-gray-500 mb-4">
+      Install the monitor as a recurring cron job, or install the dashboard as an
+      <code class="text-gray-400">@reboot</code> service so it restarts on every
+      machine boot.
+    </p>
+
+    <div class="space-y-4">
+
+      <!-- Monitor polling job -->
+      <div class="bg-gray-900 border border-gray-800 rounded-lg p-5">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-sm font-medium text-gray-200">Monitor polling job</span>
+          <span id="monitor-cron-badge"
+                class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500">checking…</span>
+        </div>
+        <p id="monitor-cron-line" class="text-xs font-mono text-gray-600 mb-3 break-all"></p>
+
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-xs text-gray-400 uppercase tracking-widest mb-1">Schedule</label>
+            <input id="monitor-schedule" type="text" value="*/5 * * * *"
+                   class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm font-mono" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 uppercase tracking-widest mb-1">Top-N
+              <span class="text-gray-600 normal-case tracking-normal">(0 = all)</span>
+            </label>
+            <input id="monitor-top" type="number" value="1000" min="0" max="10000"
+                   class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 uppercase tracking-widest mb-1">Notifiers</label>
+            <input id="monitor-notifiers" type="text" value="local"
+                   class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 uppercase tracking-widest mb-1">Workers</label>
+            <input id="monitor-workers" type="number" value="4" min="1" max="32"
+                   class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+          </div>
+          <div class="flex items-end pb-1">
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" id="monitor-new" class="accent-indigo-500" />
+              <span><span class="font-mono text-indigo-400">--new</span> (all releases)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button onclick="installCron('monitor')"
+                  class="bg-brand hover:bg-indigo-700 text-white text-sm px-4 py-1.5 rounded-md transition">
+            Install
+          </button>
+          <button onclick="uninstallCron('monitor')"
+                  class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-4 py-1.5 rounded-md transition">
+            Remove
+          </button>
+          <span id="monitor-cron-msg" class="text-sm text-gray-500"></span>
+        </div>
+      </div>
+
+      <!-- Dashboard service -->
+      <div class="bg-gray-900 border border-gray-800 rounded-lg p-5">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-sm font-medium text-gray-200">Dashboard service
+            <span class="text-xs text-gray-500 ml-1">(@reboot — starts on login/boot)</span>
+          </span>
+          <span id="dashboard-cron-badge"
+                class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500">checking…</span>
+        </div>
+        <p id="dashboard-cron-line" class="text-xs font-mono text-gray-600 mb-3 break-all"></p>
+
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-xs text-gray-400 uppercase tracking-widest mb-1">Schedule</label>
+            <input id="dashboard-schedule" type="text" value="@reboot"
+                   class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm font-mono" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 uppercase tracking-widest mb-1">Port</label>
+            <input id="dashboard-port" type="number" value="5000" min="1" max="65535"
+                   class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm" />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button onclick="installCron('dashboard')"
+                  class="bg-brand hover:bg-indigo-700 text-white text-sm px-4 py-1.5 rounded-md transition">
+            Install
+          </button>
+          <button onclick="uninstallCron('dashboard')"
+                  class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-4 py-1.5 rounded-md transition">
+            Remove
+          </button>
+          <span id="dashboard-cron-msg" class="text-sm text-gray-500"></span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Section: Live log ─────────────────────────────────────────────────── -->
+  <section>
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-xs text-gray-400 uppercase tracking-widest">Live log</h2>
+      <span id="status-badge"
+            class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500">idle</span>
+    </div>
+    <pre id="log-pane"
+         class="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 text-xs text-gray-400
+                h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed">Waiting for scan…</pre>
+  </section>
+
+  <!-- ── Section: Scan history ─────────────────────────────────────────────── -->
+  <section>
+    <h2 class="text-xs text-gray-400 uppercase tracking-widest mb-3">Scan history</h2>
+    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
+            <th class="px-4 py-2 text-left">Started</th>
+            <th class="px-4 py-2 text-left">Ecosystems</th>
+            <th class="px-4 py-2 text-left">Found</th>
+            <th class="px-4 py-2 text-left">Processed</th>
+            <th class="px-4 py-2 text-left">Errors</th>
+            <th class="px-4 py-2 text-left">Duration</th>
+            <th class="px-4 py-2 text-left">Status</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody">
+          <tr><td colspan="7" class="px-4 py-6 text-center text-gray-600">No history yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const STATUS_COLOUR = {
+  idle:    'bg-gray-800 text-gray-500',
+  running: 'bg-indigo-900 text-indigo-300',
+  error:   'bg-red-900 text-red-300',
+};
+
+let pollTimer = null;
+
+// ── Status polling ───────────────────────────────────────────────────────────
+
+async function pollStatus() {
+  const resp = await fetch('/api/scan/status');
+  const data = await resp.json();
+
+  const badge = document.getElementById('status-badge');
+  badge.className = 'text-xs px-2 py-0.5 rounded ' + (STATUS_COLOUR[data.status] || STATUS_COLOUR.idle);
+  badge.textContent = data.status;
+
+  const logPane = document.getElementById('log-pane');
+  if (data.log_lines && data.log_lines.length) {
+    logPane.textContent = data.log_lines.join('\n');
+    logPane.scrollTop = logPane.scrollHeight;
+  }
+
+  const scanning = data.status === 'running';
+  setScanningState(scanning);
+  if (scanning) {
+    if (!pollTimer) pollTimer = setInterval(pollStatus, 2000);
+  } else {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    fetchHistory();
+  }
+}
+
+function setScanningState(scanning) {
+  const btn = document.getElementById('scan-btn');
+  const forceBtn = document.getElementById('force-btn');
+  [btn, forceBtn].forEach(b => {
+    b.disabled = scanning;
+    b.classList.toggle('opacity-50', scanning);
+    b.classList.toggle('cursor-not-allowed', scanning);
+  });
+}
+
+// ── Scan form ────────────────────────────────────────────────────────────────
+
+document.getElementById('scan-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const ecosystems = [...form.querySelectorAll('input[name="ecosystem"]:checked')]
+    .map(el => el.value);
+  const notifiers = [...form.querySelectorAll('input[name="notifier"]:checked')]
+    .map(el => el.value);
+
+  if (!ecosystems.length) {
+    setMsg('scan-msg', 'Select at least one ecosystem.', 'text-yellow-400');
+    return;
+  }
+
+  const body = {
+    ecosystems,
+    notifiers,
+    top_n:           parseInt(form.top_n.value, 10),
+    workers:         parseInt(form.workers.value, 10),
+    analyze_timeout: parseInt(form.analyze_timeout.value, 10),
+    new_only:        form.querySelector('input[name="new_only"]').checked,
+  };
+
+  const resp = await fetch('/api/scan/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (resp.status === 202) {
+    setMsg('scan-msg', 'Scan started.', 'text-green-400');
+    pollStatus();
+    pollTimer = setInterval(pollStatus, 2000);
+  } else if (resp.status === 409) {
+    setMsg('scan-msg', 'A scan is already running.', 'text-yellow-400');
+  } else {
+    setMsg('scan-msg', `Error ${resp.status}`, 'text-red-400');
+  }
+});
+
+// ── Force-scan form ──────────────────────────────────────────────────────────
+
+document.getElementById('force-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const ecosystem = form.ecosystem.value;
+  const pkg = form.package.value.trim();
+  const ver = form.version.value.trim();
+
+  if (!pkg || !ver) {
+    setMsg('force-msg', 'Package and version are required.', 'text-yellow-400');
+    return;
+  }
+
+  const resp = await fetch('/api/scan/force', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ecosystem, package: pkg, version: ver }),
+  });
+
+  if (resp.status === 202) {
+    setMsg('force-msg', `Force scan started for ${pkg}@${ver}`, 'text-green-400');
+    pollStatus();
+    pollTimer = setInterval(pollStatus, 2000);
+  } else if (resp.status === 409) {
+    setMsg('force-msg', 'A scan is already running.', 'text-yellow-400');
+  } else {
+    const data = await resp.json().catch(() => ({}));
+    setMsg('force-msg', data.error || `Error ${resp.status}`, 'text-red-400');
+  }
+});
+
+// ── Reset state buttons ──────────────────────────────────────────────────────
+
+document.querySelectorAll('.reset-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const ecoStr = btn.dataset.eco;
+    const ecosystems = ecoStr.split(',').map(e => e.trim());
+    const resp = await fetch('/api/scan/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ecosystems }),
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      setMsg('reset-msg', `Reset: ${(data.reset || []).join(', ')}`, 'text-green-400');
+    } else {
+      setMsg('reset-msg', `Error ${resp.status}`, 'text-red-400');
+    }
+    // Clear the message after 4 s
+    setTimeout(() => setMsg('reset-msg', '', 'text-gray-500'), 4000);
+  });
+});
+
+// ── Scan history ─────────────────────────────────────────────────────────────
+
+async function fetchHistory() {
+  const resp = await fetch('/api/scan/history');
+  const rows = await resp.json();
+  const tbody = document.getElementById('history-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-600">No history yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  rows.forEach(r => {
+    const started = r.started_at ? r.started_at.replace('T', ' ').slice(0, 19) + 'Z' : '—';
+    const ecos = (r.ecosystems || []).join(', ') || '—';
+    let duration = '—';
+    if (r.started_at && r.finished_at) {
+      const secs = Math.round(
+        (new Date(r.finished_at) - new Date(r.started_at)) / 1000
+      );
+      duration = secs >= 60 ? `${Math.floor(secs/60)}m ${secs%60}s` : `${secs}s`;
+    }
+    const statusCls = r.status === 'error'
+      ? 'bg-red-900 text-red-300'
+      : 'bg-green-900 text-green-300';
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr class="border-t border-gray-800 text-sm">
+        <td class="px-4 py-2 text-gray-500 text-xs">${started}</td>
+        <td class="px-4 py-2 text-gray-300">${ecos}</td>
+        <td class="px-4 py-2 text-gray-400">${r.releases_found ?? '—'}</td>
+        <td class="px-4 py-2 text-gray-400">${r.processed ?? '—'}</td>
+        <td class="px-4 py-2 ${r.errors ? 'text-red-400' : 'text-gray-600'}">${r.errors ?? '—'}</td>
+        <td class="px-4 py-2 text-gray-500 text-xs">${duration}</td>
+        <td class="px-4 py-2"><span class="text-xs px-2 py-0.5 rounded ${statusCls}">${r.status}</span></td>
+      </tr>`);
+  });
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function setMsg(id, text, colour) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = `text-sm ${colour}`;
+}
+
+// ── Cron status ───────────────────────────────────────────────────────────────
+
+async function fetchCronStatus() {
+  let data;
+  try {
+    const resp = await fetch('/api/cron/status');
+    data = await resp.json();
+  } catch (e) {
+    setCronBadge('monitor', false, null);
+    setCronBadge('dashboard', false, null);
+    return;
+  }
+  setCronBadge('monitor',   data.monitor?.installed,   data.monitor?.line);
+  setCronBadge('dashboard', data.dashboard?.installed, data.dashboard?.line);
+}
+
+function setCronBadge(type, installed, line) {
+  const badge = document.getElementById(`${type}-cron-badge`);
+  const lineEl = document.getElementById(`${type}-cron-line`);
+  if (installed) {
+    badge.className = 'text-xs px-2 py-0.5 rounded bg-green-900 text-green-300';
+    badge.textContent = 'installed';
+    lineEl.textContent = line || '';
+  } else {
+    badge.className = 'text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500';
+    badge.textContent = 'not installed';
+    lineEl.textContent = '';
+  }
+}
+
+async function installCron(type) {
+  const body = { type };
+  if (type === 'monitor') {
+    body.schedule  = document.getElementById('monitor-schedule').value.trim();
+    body.top       = document.getElementById('monitor-top').value;
+    body.notifiers = document.getElementById('monitor-notifiers').value.trim();
+    body.workers   = document.getElementById('monitor-workers').value;
+    body.new       = document.getElementById('monitor-new').checked;
+  } else {
+    body.schedule = document.getElementById('dashboard-schedule').value.trim();
+    body.port     = document.getElementById('dashboard-port').value;
+  }
+
+  const resp = await fetch('/api/cron/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (resp.ok) {
+    setMsg(`${type}-cron-msg`, 'Installed.', 'text-green-400');
+  } else {
+    setMsg(`${type}-cron-msg`, data.error || `Error ${resp.status}`, 'text-red-400');
+  }
+  setTimeout(() => setMsg(`${type}-cron-msg`, '', 'text-gray-500'), 5000);
+  fetchCronStatus();
+}
+
+async function uninstallCron(type) {
+  const resp = await fetch('/api/cron/uninstall', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type }),
+  });
+  const data = await resp.json();
+  if (resp.ok) {
+    setMsg(`${type}-cron-msg`, 'Removed.', 'text-yellow-400');
+  } else {
+    setMsg(`${type}-cron-msg`, data.error || `Error ${resp.status}`, 'text-red-400');
+  }
+  setTimeout(() => setMsg(`${type}-cron-msg`, '', 'text-gray-500'), 5000);
+  fetchCronStatus();
+}
+
+// Bootstrap on page load
+pollStatus();
+fetchHistory();
+fetchCronStatus();
+</script>
+{% endblock %}

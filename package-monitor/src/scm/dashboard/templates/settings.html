@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Package Monitor{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-6 py-8">
+  <h1 class="text-2xl font-bold text-gray-100 mb-1">Settings</h1>
+  <p class="text-sm text-gray-400 mb-8">
+    Changes are written to <code class="text-gray-300">config.yaml</code> immediately.
+    They take effect on the next scan cycle — no restart required for most settings.
+    <span class="text-yellow-400">Dashboard host/port require a process restart.</span>
+  </p>
+
+  <!-- Save feedback banner -->
+  <div id="save-banner" class="hidden mb-6 px-4 py-3 rounded-md text-sm font-medium"></div>
+
+  <form id="settings-form" class="space-y-8">
+
+    <!-- ── Core ─────────────────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2 mb-4">Core</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="top">
+            Top packages per ecosystem
+            <span class="text-gray-500">(0 = all new releases)</span>
+          </label>
+          <input id="top" name="top" type="number" min="0"
+            value="{{ cfg.top }}"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="interval">
+            Poll interval (seconds)
+          </label>
+          <input id="interval" name="interval" type="number" min="60"
+            value="{{ cfg.interval }}"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="workers">
+            Parallel workers per ecosystem
+          </label>
+          <input id="workers" name="workers" type="number" min="1" max="32"
+            value="{{ cfg.workers }}"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="analyze_timeout">
+            opencode timeout per release (seconds)
+          </label>
+          <input id="analyze_timeout" name="analyze_timeout" type="number" min="30"
+            value="{{ cfg.analyze_timeout }}"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="log_level">
+            Log level
+          </label>
+          <select id="log_level" name="log_level"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+            {% for level in ["DEBUG", "INFO", "WARNING", "ERROR"] %}
+              <option value="{{ level }}" {% if cfg.log_level == level %}selected{% endif %}>{{ level }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Ecosystems & Notifiers ─────────────────────────────────────── -->
+    <section>
+      <h2 class="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2 mb-4">Ecosystems &amp; Notifiers</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="ecosystems">
+            Ecosystems <span class="text-gray-500">(comma-separated)</span>
+          </label>
+          <input id="ecosystems" name="ecosystems" type="text"
+            value="{{ cfg.ecosystems | join(', ') }}"
+            placeholder="npm, pypi"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="notifiers">
+            Notifiers <span class="text-gray-500">(comma-separated)</span>
+          </label>
+          <input id="notifiers" name="notifiers" type="text"
+            value="{{ cfg.notifiers | join(', ') }}"
+            placeholder="local, twitter, slack"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Analyzer ───────────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2 mb-4">Analyzer</h2>
+      <div class="space-y-6">
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="analyzer_model">
+            opencode model
+            <span class="text-gray-500 ml-1">(passed as <code>--model</code>)</span>
+          </label>
+          <input id="analyzer_model" name="analyzer_model" type="text"
+            value="{{ cfg.analyzer_model }}"
+            placeholder="github-copilot/claude-sonnet-4.6"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm font-mono focus:outline-none focus:border-brand">
+          <p class="text-xs text-gray-500 mt-1">Run <code>opencode models</code> for the full list of available model IDs.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="analyzer_prompt">
+            Analysis prompt
+          </label>
+          <textarea id="analyzer_prompt" name="analyzer_prompt" rows="20"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-xs font-mono leading-relaxed focus:outline-none focus:border-brand resize-y"
+          >{{ cfg.analyzer_prompt }}</textarea>
+          <p class="text-xs text-gray-500 mt-1">
+            Sent verbatim to opencode. Scanner findings are written to
+            <code>scanner_findings.md</code> in the workspace before opencode is invoked.
+            The prompt is passed as the message argument to <code>opencode run</code>.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Dashboard ─────────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2 mb-4">Dashboard</h2>
+      <p class="text-xs text-yellow-400 mb-4">Host and port changes require a process restart to take effect.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="dashboard_host">
+            Bind address
+          </label>
+          <input id="dashboard_host" name="dashboard_host" type="text"
+            value="{{ cfg.dashboard_host }}"
+            placeholder="0.0.0.0"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm font-mono focus:outline-none focus:border-brand">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-400 mb-1" for="dashboard_port">
+            HTTP port
+          </label>
+          <input id="dashboard_port" name="dashboard_port" type="number" min="1" max="65535"
+            value="{{ cfg.dashboard_port }}"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand">
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Save button ────────────────────────────────────────────────── -->
+    <div class="flex items-center gap-4 pt-2 border-t border-gray-800">
+      <button type="submit"
+        id="save-btn"
+        class="bg-brand hover:bg-brand-dark text-white text-sm font-medium px-6 py-2 rounded-md transition">
+        Save settings
+      </button>
+      <span id="save-spinner" class="hidden text-gray-400 text-sm">Saving…</span>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById('settings-form');
+  const banner = document.getElementById('save-banner');
+  const saveBtn = document.getElementById('save-btn');
+  const spinner = document.getElementById('save-spinner');
+
+  function showBanner(msg, ok) {
+    banner.textContent = msg;
+    banner.className = ok
+      ? 'mb-6 px-4 py-3 rounded-md text-sm font-medium bg-green-900/50 text-green-300 border border-green-700'
+      : 'mb-6 px-4 py-3 rounded-md text-sm font-medium bg-red-900/50 text-red-300 border border-red-700';
+    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => { banner.className = 'hidden'; }, 6000);
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    saveBtn.disabled = true;
+    spinner.classList.remove('hidden');
+
+    const payload = {
+      top:              parseInt(document.getElementById('top').value, 10),
+      interval:         parseInt(document.getElementById('interval').value, 10),
+      workers:          parseInt(document.getElementById('workers').value, 10),
+      analyze_timeout:  parseInt(document.getElementById('analyze_timeout').value, 10),
+      log_level:        document.getElementById('log_level').value,
+      ecosystems:       document.getElementById('ecosystems').value,
+      notifiers:        document.getElementById('notifiers').value,
+      analyzer_model:   document.getElementById('analyzer_model').value.trim(),
+      analyzer_prompt:  document.getElementById('analyzer_prompt').value,
+      dashboard_host:   document.getElementById('dashboard_host').value.trim(),
+      dashboard_port:   parseInt(document.getElementById('dashboard_port').value, 10),
+    };
+
+    try {
+      const resp = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = await resp.json();
+      if (resp.ok && body.ok) {
+        showBanner('Settings saved to config.yaml.', true);
+      } else {
+        showBanner('Error: ' + (body.error || resp.statusText), false);
+      }
+    } catch (err) {
+      showBanner('Network error: ' + err.message, false);
+    } finally {
+      saveBtn.disabled = false;
+      spinner.classList.add('hidden');
+    }
+  });
+</script>
+{% endblock %}

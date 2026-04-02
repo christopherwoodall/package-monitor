@@ -287,6 +287,88 @@ uv run pytest -v
 
 ---
 
+## Development Tools
+
+Code quality and analysis commands for development and code review.
+
+### Lint (ruff)
+
+Run the linter and format checker on the codebase:
+
+```bash
+# Check src and tests for linting and formatting issues
+uv run package-monitor-lint
+
+# Auto-fix issues where possible
+uv run package-monitor-lint --fix
+
+# Check specific paths
+uv run package-monitor-lint src/scm/collectors
+```
+
+### Type Check (pyright)
+
+Run static type analysis:
+
+```bash
+# Type check src/
+uv run package-monitor-typecheck
+
+# Enable strict mode
+uv run package-monitor-typecheck --strict
+
+# Check specific paths
+uv run package-monitor-typecheck src/scm/analyzer.py
+```
+
+### Complexity Analysis (radon)
+
+Analyze cyclomatic complexity of the codebase:
+
+```bash
+# Show functions with rank C or worse (default)
+uv run package-monitor-complex
+
+# Show average complexity per file
+uv run package-monitor-complex --average
+
+# Show all functions regardless of rank
+uv run package-monitor-complex --show-all
+
+# Only show ranks D and worse
+uv run package-monitor-complex --min-rank D
+```
+
+Complexity rankings: A (best) → F (worst)
+
+### Dependency Graph (pydeps)
+
+Generate module dependency graphs for AI consumption:
+
+```bash
+# Generate JSON graph of src/scm dependencies (default)
+uv run package-monitor-graph --format json
+
+# Text output format
+uv run package-monitor-graph --format text
+
+# Save to file
+uv run package-monitor-graph --format json -o deps.json
+
+# Include more hops (0 = infinite)
+uv run package-monitor-graph --max-bacon 3 --format json
+
+# Exclude external dependencies
+uv run package-monitor-graph --no-externals --format json
+```
+
+The graph output shows:
+- Module import relationships (`imports` / `imported_by`)
+- Distance from root (`bacon` score)
+- File paths for each module
+
+---
+
 ## Troubleshooting
 
 ### `uv sync` fails with `ModuleNotFoundError: No module named 'setuptools.backends'`

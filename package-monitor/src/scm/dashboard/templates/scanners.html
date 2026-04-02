@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Scanners — Package Monitor{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-6 py-8">
+  <h1 class="text-2xl font-bold text-gray-100 mb-1">Scanners</h1>
+  <p class="text-sm text-gray-400 mb-8">
+    Scanners run against the extracted new release before opencode sees it.
+    Findings are written to <code class="text-gray-300">scanner_findings.md</code>
+    in the analysis workspace and passed to opencode for review.
+    Changes are written to <code class="text-gray-300">config.yaml</code> immediately
+    and take effect on the next scan cycle.
+  </p>
+
+  <!-- Save feedback banner -->
+  <div id="save-banner" class="hidden mb-6 px-4 py-3 rounded-md text-sm font-medium"></div>
+
+  <form id="scanners-form" class="space-y-4">
+    {% for scanner_name in available_scanners %}
+    <div class="bg-gray-800/50 rounded p-4">
+      <label class="flex items-center gap-3 cursor-pointer mb-3">
+        <input type="checkbox" name="enabled_scanners" value="{{ scanner_name }}"
+          {% if scanner_name in cfg.enabled_scanners %}checked{% endif %}
+          class="rounded border-gray-600 bg-gray-700 text-brand focus:ring-brand">
+        <span class="text-sm font-medium text-gray-200">{{ scanner_name }}</span>
+      </label>
+      {% if scanner_name == "diff" %}
+      <div class="grid grid-cols-2 gap-3 ml-7">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">max_diff_bytes</label>
+          <input type="number" name="sc_diff_max_diff_bytes" min="1000"
+            value="{{ cfg.scanner_config.get('diff', {}).get('max_diff_bytes', 500000) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">context_lines</label>
+          <input type="number" name="sc_diff_context_lines" min="0" max="20"
+            value="{{ cfg.scanner_config.get('diff', {}).get('context_lines', 3) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+      </div>
+      {% elif scanner_name == "base64_strings" %}
+      <div class="grid grid-cols-3 gap-3 ml-7">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">min_length</label>
+          <input type="number" name="sc_base64_strings_min_length" min="8"
+            value="{{ cfg.scanner_config.get('base64_strings', {}).get('min_length', 60) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">max_hits</label>
+          <input type="number" name="sc_base64_strings_max_hits" min="1"
+            value="{{ cfg.scanner_config.get('base64_strings', {}).get('max_hits', 50) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">snippet_length</label>
+          <input type="number" name="sc_base64_strings_snippet_length" min="20"
+            value="{{ cfg.scanner_config.get('base64_strings', {}).get('snippet_length', 120) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+      </div>
+      {% elif scanner_name == "binary_strings" %}
+      <div class="grid grid-cols-3 gap-3 ml-7">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">min_length</label>
+          <input type="number" name="sc_binary_strings_min_length" min="4"
+            value="{{ cfg.scanner_config.get('binary_strings', {}).get('min_length', 8) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">max_lines_per_file</label>
+          <input type="number" name="sc_binary_strings_max_lines_per_file" min="10"
+            value="{{ cfg.scanner_config.get('binary_strings', {}).get('max_lines_per_file', 100) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">max_total_lines</label>
+          <input type="number" name="sc_binary_strings_max_total_lines" min="100"
+            value="{{ cfg.scanner_config.get('binary_strings', {}).get('max_total_lines', 500) }}"
+            class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-100 text-xs focus:outline-none focus:border-brand">
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- ── Save button ──────────────────────────────────────────────────── -->
+    <div class="flex items-center gap-4 pt-2 border-t border-gray-800">
+      <button type="submit"
+        id="save-btn"
+        class="bg-brand hover:bg-brand-dark text-white text-sm font-medium px-6 py-2 rounded-md transition">
+        Save scanner settings
+      </button>
+      <span id="save-spinner" class="hidden text-gray-400 text-sm">Saving…</span>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById('scanners-form');
+  const banner = document.getElementById('save-banner');
+  const saveBtn = document.getElementById('save-btn');
+  const spinner = document.getElementById('save-spinner');
+
+  function showBanner(msg, ok) {
+    banner.textContent = msg;
+    banner.className = ok
+      ? 'mb-6 px-4 py-3 rounded-md text-sm font-medium bg-green-900/50 text-green-300 border border-green-700'
+      : 'mb-6 px-4 py-3 rounded-md text-sm font-medium bg-red-900/50 text-red-300 border border-red-700';
+    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => { banner.className = 'hidden'; }, 6000);
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    saveBtn.disabled = true;
+    spinner.classList.remove('hidden');
+
+    const checkedScanners = Array.from(
+      document.querySelectorAll('input[name="enabled_scanners"]:checked')
+    ).map(cb => cb.value);
+
+    const scannerConfig = {};
+
+    const diffMaxBytes = document.querySelector('input[name="sc_diff_max_diff_bytes"]');
+    if (diffMaxBytes) {
+      scannerConfig.diff = {
+        max_diff_bytes: parseInt(diffMaxBytes.value, 10),
+        context_lines:  parseInt(document.querySelector('input[name="sc_diff_context_lines"]').value, 10),
+      };
+    }
+
+    const b64MinLen = document.querySelector('input[name="sc_base64_strings_min_length"]');
+    if (b64MinLen) {
+      scannerConfig.base64_strings = {
+        min_length:     parseInt(b64MinLen.value, 10),
+        max_hits:       parseInt(document.querySelector('input[name="sc_base64_strings_max_hits"]').value, 10),
+        snippet_length: parseInt(document.querySelector('input[name="sc_base64_strings_snippet_length"]').value, 10),
+      };
+    }
+
+    const binMinLen = document.querySelector('input[name="sc_binary_strings_min_length"]');
+    if (binMinLen) {
+      scannerConfig.binary_strings = {
+        min_length:          parseInt(binMinLen.value, 10),
+        max_lines_per_file:  parseInt(document.querySelector('input[name="sc_binary_strings_max_lines_per_file"]').value, 10),
+        max_total_lines:     parseInt(document.querySelector('input[name="sc_binary_strings_max_total_lines"]').value, 10),
+      };
+    }
+
+    const payload = {
+      enabled_scanners: checkedScanners,
+      scanner_config:   scannerConfig,
+    };
+
+    try {
+      const resp = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = await resp.json();
+      if (resp.ok && body.ok) {
+        showBanner('Scanner settings saved to config.yaml.', true);
+      } else {
+        showBanner('Error: ' + (body.error || resp.statusText), false);
+      }
+    } catch (err) {
+      showBanner('Network error: ' + err.message, false);
+    } finally {
+      saveBtn.disabled = false;
+      spinner.classList.add('hidden');
+    }
+  });
+</script>
+{% endblock %}

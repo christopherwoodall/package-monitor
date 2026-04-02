@@ -1,0 +1,44 @@
+[project]
+name = "package-monitor"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["tweepy>=4.14", "flask>=3.0", "pyyaml>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-mock>=3.14", "ruff>=0.1.0", "radon>=6.0", "pydeps>=3.0", "pyright>=1.1.0"]
+
+[project.scripts]
+package-monitor             = "scm.cli:main"
+package-monitor-install-cron   = "scm.scheduler:install_cron_main"
+package-monitor-uninstall-cron = "scm.scheduler:uninstall_cron_main"
+package-monitor-dashboard      = "scm.dashboard.app:main"
+package-monitor-dashboard-install-service   = "scm.scheduler:dashboard_install_cron_main"
+package-monitor-dashboard-uninstall-service = "scm.scheduler:dashboard_uninstall_cron_main"
+package-monitor-lint      = "scm.devtools.lint:main"
+package-monitor-typecheck = "scm.devtools.typecheck:main"
+package-monitor-complex   = "scm.devtools.complex:main"
+package-monitor-graph     = "scm.devtools.graph:main"
+
+[project.entry-points."package_monitor.collectors"]
+npm  = "scm.collectors.npm:NpmCollector"
+pypi = "scm.collectors.pypi:PypiCollector"
+
+[project.entry-points."package_monitor.notifiers"]
+local   = "scm.notifiers.local:LocalNotifier"
+twitter = "scm.notifiers.twitter:TwitterNotifier"
+slack   = "scm.notifiers.slack:SlackNotifier"
+
+[project.entry-points."package_monitor.scanners"]
+diff           = "scm.scanners.diff:DiffScanner"
+base64_strings = "scm.scanners.base64_strings:Base64StringsScanner"
+binary_strings  = "scm.scanners.binary_strings:BinaryStringsScanner"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

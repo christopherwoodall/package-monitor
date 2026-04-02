@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Package Monitor{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#6366f1', dark: '#4f46e5' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="h-full text-gray-100 font-mono">
+
+<!-- ── Navigation ─────────────────────────────────────────────────────── -->
+<nav class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center gap-6">
+  <a href="/" class="text-brand font-bold text-lg tracking-tight hover:text-indigo-300">
+    package-monitor
+  </a>
+
+  <div class="flex items-center gap-4 ml-auto">
+    {% if collector_states is defined %}
+      {% for cs in collector_states %}
+        <span class="flex items-center gap-1.5 text-xs text-gray-400">
+          <span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+          {{ cs.ecosystem }}
+        </span>
+      {% endfor %}
+    {% endif %}
+  </div>
+</nav>
+
+<!-- ── Body: sidebar + content ────────────────────────────────────────── -->
+<div class="flex flex-col md:flex-row min-h-[calc(100vh-3.25rem)]">
+
+  {% include '_sidebar.html' %}
+
+  <!-- ── Page content ─────────────────────────────────────────────────── -->
+  <div class="flex-1 min-w-0">
+    <main class="max-w-7xl mx-auto px-6 py-8">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

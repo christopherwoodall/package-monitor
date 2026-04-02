@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Package Monitor{% endblock %}
+
+{% block content %}
+
+<!-- ── Stats cards ─────────────────────────────────────────────────────── -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  {% set cards = [
+    ("Total Scans",    stats.total_scans,      "text-indigo-400"),
+    ("Malicious",      stats.malicious,        "text-red-400"),
+    ("Benign",         stats.benign,           "text-green-400"),
+    ("Unknown/Error",  stats.unknown + stats.error, "text-yellow-400"),
+  ] %}
+  {% for label, value, colour in cards %}
+  <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+    <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">{{ label }}</p>
+    <p class="text-3xl font-bold {{ colour }}">{{ value }}</p>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── Ecosystem breakdown ─────────────────────────────────────────────── -->
+{% if breakdown %}
+<div class="mb-8">
+  <h2 class="text-sm text-gray-400 uppercase tracking-widest mb-3">Ecosystem breakdown</h2>
+  <div class="flex gap-4">
+    {% for row in breakdown %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg px-5 py-3 flex gap-4 items-center">
+      <span class="text-gray-200 font-semibold">{{ row.ecosystem }}</span>
+      <span class="text-gray-400 text-sm">{{ row.count }} scans</span>
+      {% if row.malicious_count %}
+      <span class="bg-red-900 text-red-300 text-xs px-2 py-0.5 rounded">
+        {{ row.malicious_count }} malicious
+      </span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Active scan banner ──────────────────────────────────────────────── -->
+<div id="scan-banner" class="hidden mb-6 bg-indigo-950 border border-indigo-700 rounded-lg px-5 py-3 flex items-center gap-3">
+  <svg class="animate-spin h-4 w-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+  </svg>
+  <span class="text-indigo-300 text-sm" id="scan-banner-text">Scan running…</span>
+  <a href="/scan" class="ml-auto text-xs text-indigo-400 underline hover:text-indigo-200">View details</a>
+</div>
+
+<!-- ── Verdict feed ────────────────────────────────────────────────────── -->
+<div class="flex items-center justify-between mb-3">
+  <h2 class="text-sm text-gray-400 uppercase tracking-widest">Packages</h2>
+  <div class="flex gap-2">
+    <select id="filter-ecosystem" class="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border border-gray-700">
+      <option value="">All ecosystems</option>
+      {% for row in breakdown %}
+      <option value="{{ row.ecosystem }}">{{ row.ecosystem }}</option>
+      {% endfor %}
+    </select>
+    <select id="filter-result" class="bg-gray-800 text-gray-300 text-xs rounded px-2 py-1 border border-gray-700">
+      <option value="">All results</option>
+      <option value="malicious">malicious</option>
+      <option value="benign">benign</option>
+      <option value="unknown">unknown</option>
+      <option value="error">error</option>
+    </select>
+  </div>
+</div>
+
+<div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
+        <th class="px-4 py-2 text-left">Package</th>
+        <th class="px-4 py-2 text-left">Version</th>
+        <th class="px-4 py-2 text-left">Ecosystem</th>
+        <th class="px-4 py-2 text-left">Result</th>
+        <th class="px-4 py-2 text-left">Confidence</th>
+        <th class="px-4 py-2 text-left">Summary</th>
+        <th class="px-4 py-2 text-left">Analyzed</th>
+      </tr>
+    </thead>
+    <tbody id="verdict-tbody">
+      <tr><td colspan="7" class="px-4 py-6 text-center text-gray-600">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Load more ──────────────────────────────────────────────────────── -->
+<div class="mt-4 flex justify-center">
+  <button id="load-more"
+          class="text-xs text-gray-400 border border-gray-700 rounded px-4 py-1.5 hover:border-gray-500 hover:text-gray-200 transition">
+    Load more
+  </button>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const RESULT_BADGE = {
+  malicious: 'bg-red-900 text-red-300',
+  benign:    'bg-green-900 text-green-300',
+  unknown:   'bg-yellow-900 text-yellow-300',
+  error:     'bg-gray-700 text-gray-300',
+};
+
+let offset = 0;
+const PAGE = 50;
+
+function badge(result) {
+  const cls = RESULT_BADGE[result] || 'bg-gray-700 text-gray-400';
+  return `<span class="text-xs px-2 py-0.5 rounded font-semibold ${cls}">${result}</span>`;
+}
+
+function renderRows(rows, append = false) {
+  const tbody = document.getElementById('verdict-tbody');
+  if (!append) tbody.innerHTML = '';
+  if (rows.length === 0 && !append) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-600">No packages scanned yet.</td></tr>';
+    return;
+  }
+  rows.forEach(r => {
+    const pkg_link = `/package/${encodeURIComponent(r.ecosystem)}/${encodeURIComponent(r.package)}`;
+    const ts = r.analyzed_at ? r.analyzed_at.replace('T', ' ').slice(0, 16) : '—';
+    const summary = r.summary ? r.summary.slice(0, 80) + (r.summary.length > 80 ? '…' : '') : '—';
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr class="border-t border-gray-800 hover:bg-gray-800/50 transition">
+        <td class="px-4 py-2"><a href="${pkg_link}" class="text-indigo-400 hover:underline">${r.package}</a></td>
+        <td class="px-4 py-2 text-gray-400">${r.version}</td>
+        <td class="px-4 py-2 text-gray-400">${r.ecosystem}</td>
+        <td class="px-4 py-2">${badge(r.result)}</td>
+        <td class="px-4 py-2 text-gray-400">${r.confidence}</td>
+        <td class="px-4 py-2 text-gray-500 truncate max-w-xs" title="${r.summary || ''}">${summary}</td>
+        <td class="px-4 py-2 text-gray-600 text-xs">${ts}</td>
+      </tr>`);
+  });
+}
+
+async function fetchPackages(reset = true) {
+  if (reset) offset = 0;
+  const eco = document.getElementById('filter-ecosystem').value;
+  const res = document.getElementById('filter-result').value;
+  let url = `/api/packages?offset=${offset}&limit=${PAGE}`;
+  if (eco) url += `&ecosystem=${encodeURIComponent(eco)}`;
+  if (res) url += `&result=${encodeURIComponent(res)}`;
+  const resp = await fetch(url);
+  const rows = await resp.json();
+  renderRows(rows, !reset);
+  offset += rows.length;
+}
+
+async function checkScanStatus() {
+  const resp = await fetch('/api/scan/status');
+  const data = await resp.json();
+  const banner = document.getElementById('scan-banner');
+  const bannerText = document.getElementById('scan-banner-text');
+  if (data.status === 'running') {
+    banner.classList.remove('hidden');
+    const ecos = (data.ecosystems || []).join(', ');
+    bannerText.textContent = `Scan running — ecosystems: ${ecos}`;
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+// Initial load
+fetchPackages();
+checkScanStatus();
+
+// Auto-refresh every 15 s
+setInterval(() => fetchPackages(true), 15000);
+// Scan status every 3 s
+setInterval(checkScanStatus, 3000);
+
+document.getElementById('load-more').addEventListener('click', () => fetchPackages(false));
+document.getElementById('filter-ecosystem').addEventListener('change', () => fetchPackages(true));
+document.getElementById('filter-result').addEventListener('change', () => fetchPackages(true));
+</script>
+{% endblock %}
