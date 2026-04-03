@@ -237,6 +237,32 @@ the GIL.
 a race condition. `subprocess.run(cwd=)` is per-invocation and thread-safe.
 This is non-negotiable — never use `os.chdir()` anywhere in this codebase.
 
+### Workspace layout
+
+`analyzer.analyze()` creates a fresh temp directory (`workspace`) for each
+release and passes it as `cwd` to opencode. Its contents at invocation time:
+
+```
+workspace/
+├── scanner_findings.md   ← scanner output (diff, base64 hits, binary strings)
+└── new/                  ← full extracted new release tree (copied via shutil.copytree)
+```
+
+`new/` is absent if the tree size exceeds `_WORKSPACE_SIZE_LIMIT_BYTES` (1 GB).
+In that case opencode analyses `scanner_findings.md` alone and a warning is logged.
+
+The old release tree is **not** copied into the workspace — opencode only examines
+the new release. The diff scanner captures old-vs-new changes in `scanner_findings.md`.
+
+The workspace is cleaned up unconditionally in the `finally` block of
+`analyze()` — immediately after `run_opencode()` returns. The orchestrator's
+separate `tmpdir` (which holds the raw tarballs and their extraction roots)
+is also cleaned up in its own `finally` block at `orchestrator.py`.
+
+The smoke-test suite (`tests/test_analyzer.py` — `test_analyze_smoke_canary_*`
+and `test_analyze_copies_*`) guards against any regression where the new tree
+stops being copied in.
+
 ### Why crontab over launchd
 
 crontab is cross-platform Unix. launchd is macOS-only. The project is designed
