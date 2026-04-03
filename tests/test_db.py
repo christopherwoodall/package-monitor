@@ -189,6 +189,19 @@ def test_save_artifacts_is_idempotent_on_rescan(db_conn):
     assert len(rows) == 2, "expected exactly 2 artifact rows, not duplicates"
 
 
+def test_save_artifacts_old_none_writes_only_new_row(db_conn):
+    """When old=None (force-scan with no previous version), only 'new' row is written."""
+    r = _make_release()
+    rid = upsert_release(db_conn, r)
+    new = _make_artifact("4.17.21")
+    save_artifacts(db_conn, rid, None, new)
+    rows = db_conn.execute(
+        "SELECT role FROM artifacts WHERE release_id = ?", (rid,)
+    ).fetchall()
+    roles = {row["role"] for row in rows}
+    assert roles == {"new"}
+
+
 # ---------------------------------------------------------------------------
 # save_verdict
 # ---------------------------------------------------------------------------

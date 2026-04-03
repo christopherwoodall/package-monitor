@@ -176,16 +176,17 @@ def get_release_id(
 def save_artifacts(
     conn: sqlite3.Connection,
     release_id: int,
-    old: StoredArtifact,
+    old: StoredArtifact | None,
     new: StoredArtifact,
 ) -> None:
-    """Persist old + new artifact rows for a release.
+    """Persist artifact rows for a release.
 
-    Uses INSERT OR IGNORE so that rescans of an already-stored release are
-    idempotent — if artifact rows already exist for this (release_id, role)
-    pair they are left untouched.
+    Uses INSERT OR IGNORE so that rescans are idempotent.
+    The old artifact is skipped when None (e.g. force-scans with no previous version).
     """
     for role, art in (("old", old), ("new", new)):
+        if art is None:
+            continue
         conn.execute(
             """
             INSERT OR IGNORE INTO artifacts (release_id, role, filename, path, sha256, size_bytes)

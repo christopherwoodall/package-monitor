@@ -14,7 +14,7 @@
     <h1 class="text-2xl font-bold text-gray-100">{{ package }}</h1>
     <p class="text-sm text-gray-500 mt-0.5">ecosystem: {{ ecosystem }}</p>
   </div>
-  <span class="text-xs text-gray-600">{{ history | length }} version(s) scanned</span>
+  <span class="text-xs text-gray-600">{{ history | length }} scan(s)</span>
 </div>
 
 {% if not history %}
@@ -26,6 +26,7 @@
   <table class="w-full text-sm">
     <thead>
       <tr class="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
+        <th class="px-4 py-2 text-left">Scan #</th>
         <th class="px-4 py-2 text-left">Version</th>
         <th class="px-4 py-2 text-left">Result</th>
         <th class="px-4 py-2 text-left">Confidence</th>
@@ -44,6 +45,7 @@
       {% for row in history %}
       <tr class="border-t border-gray-800 hover:bg-gray-800/50 transition"
           data-idx="{{ loop.index0 }}">
+        <td class="px-4 py-2 text-gray-600 text-xs font-mono">#{{ row.verdict_id }}</td>
         <td class="px-4 py-2 text-gray-200 font-semibold">{{ row.version }}</td>
         <td class="px-4 py-2">
           <span class="text-xs px-2 py-0.5 rounded font-semibold {{ BADGE.get(row.result, 'bg-gray-700 text-gray-400') }}">

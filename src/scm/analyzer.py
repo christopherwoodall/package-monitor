@@ -38,9 +38,41 @@ __all__ = [
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[^a-zA-Z]*[a-zA-Z]")
 
+# Maximum combined byte size of old+new package trees copied into the workspace.
+# Packages exceeding this limit are analysed on scanner_findings.md alone.
+_WORKSPACE_SIZE_LIMIT_BYTES = 1_000_000_000  # 1 GB
+
 
 def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from *text* before regex parsing."""
     return ANSI_ESCAPE.sub("", text)
+
+
+def _tree_size(root: Path) -> int:
+    """Return total byte size of all files under *root*."""
+    return sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+
+
+def _copy_tree_into_workspace(new_root: Path, workspace: Path) -> None:
+    """Copy the new release tree into *workspace/new/* for opencode.
+
+    Skips the copy and logs a warning if the tree exceeds
+    _WORKSPACE_SIZE_LIMIT_BYTES. opencode will still run on
+    scanner_findings.md alone in that case.
+    """
+    size = _tree_size(new_root)
+
+    if size > _WORKSPACE_SIZE_LIMIT_BYTES:
+        log.warning(
+            "new package tree is %d bytes — exceeds %d byte limit; "
+            "skipping copy into workspace (opencode will analyse findings only)",
+            size,
+            _WORKSPACE_SIZE_LIMIT_BYTES,
+        )
+        return
+
+    shutil.copytree(new_root, workspace / "new")
+    log.debug("copied new tree into workspace (%d bytes)", size)
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +105,8 @@ def run_opencode(
     or None if it could not be identified.
 
     Args:
-        workspace: Directory containing scanner_findings.md.
+        workspace: Directory containing scanner_findings.md and (when within
+                   the size limit) new/ and old/ extracted package trees.
         timeout:   Maximum seconds to wait for opencode.
         model:     If set, passed as ``--model MODEL`` to opencode.
         prompt:    Prompt text to send.
@@ -168,7 +201,7 @@ def parse_verdict(output: str) -> tuple[str, str, str]:
 
 def analyze(
     release: Release,
-    old_artifact: StoredArtifact,
+    old_artifact: StoredArtifact | None,
     new_artifact: StoredArtifact,
     old_root: Path | None,
     new_root: Path,
@@ -216,6 +249,10 @@ def analyze(
                 findings_text, encoding="utf-8"
             )
             log.debug("wrote scanner_findings.md (%d section(s))", len(sections))
+
+        # Copy new release tree into workspace so opencode can examine
+        # the full source, not just the scanner findings.
+        _copy_tree_into_workspace(new_root, workspace)
 
         raw_output, opencode_log_path = run_opencode(
             workspace, timeout, model=model, prompt=prompt

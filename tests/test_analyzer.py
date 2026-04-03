@@ -545,3 +545,162 @@ def test_analyze_no_scanner_findings_does_not_write_file(tmp_path, mocker):
         scanners=[mock_scanner],
     )
     mock_scanner.scan.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# analyze — workspace layout (smoke tests)
+# ---------------------------------------------------------------------------
+
+
+def _capturing_run(workspace_snapshots: list[dict]):
+    """Return a subprocess.run side-effect that snapshots workspace contents.
+
+    Because analyze() cleans up the workspace in its finally block before
+    returning, we cannot inspect the workspace after the call. Instead we
+    capture what exists at the moment subprocess.run is invoked.
+    """
+
+    def _run(args, **kwargs):
+        ws = Path(kwargs["cwd"])
+        workspace_snapshots.append(
+            {
+                "has_new": (ws / "new").is_dir(),
+                "has_old": (ws / "old").is_dir(),
+                "new_files": sorted(
+                    str(p.relative_to(ws / "new"))
+                    for p in (ws / "new").rglob("*")
+                    if p.is_file()
+                )
+                if (ws / "new").is_dir()
+                else [],
+                "old_files": sorted(
+                    str(p.relative_to(ws / "old"))
+                    for p in (ws / "old").rglob("*")
+                    if p.is_file()
+                )
+                if (ws / "old").is_dir()
+                else [],
+            }
+        )
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = "Verdict: benign\nConfidence: high\nSummary: ok\n"
+        r.stderr = ""
+        return r
+
+    return _run
+
+
+def test_analyze_copies_new_root_into_workspace(tmp_path, mocker):
+    """new_root must be copied to workspace/new/ before opencode is invoked."""
+    new_root = tmp_path / "new_root"
+    new_root.mkdir()
+    (new_root / "index.js").write_text("console.log('hello')", encoding="utf-8")
+
+    snapshots: list[dict] = []
+    mocker.patch("subprocess.run", side_effect=_capturing_run(snapshots))
+    mocker.patch("scm.analyzer.Path.home", return_value=Path("/nonexistent-home"))
+
+    analyze(
+        release=_make_release(),
+        old_artifact=_make_artifact("1.0.0"),
+        new_artifact=_make_artifact("1.0.1"),
+        old_root=None,
+        new_root=new_root,
+        changed_files=[],
+        added_files=[],
+    )
+
+    assert len(snapshots) == 1
+    assert snapshots[0]["has_new"]
+    assert "index.js" in snapshots[0]["new_files"]
+
+
+def test_analyze_does_not_copy_old_root_into_workspace(tmp_path, mocker):
+    """old_root must NOT be copied into workspace — only new/ is provided to opencode."""
+    new_root = tmp_path / "new_root"
+    new_root.mkdir()
+    (new_root / "new.js").write_text("// new", encoding="utf-8")
+
+    old_root = tmp_path / "old_root"
+    old_root.mkdir()
+    (old_root / "old.js").write_text("// old", encoding="utf-8")
+
+    snapshots: list[dict] = []
+    mocker.patch("subprocess.run", side_effect=_capturing_run(snapshots))
+    mocker.patch("scm.analyzer.Path.home", return_value=Path("/nonexistent-home"))
+
+    analyze(
+        release=_make_release(),
+        old_artifact=_make_artifact("1.0.0"),
+        new_artifact=_make_artifact("1.0.1"),
+        old_root=old_root,
+        new_root=new_root,
+        changed_files=[],
+        added_files=[],
+    )
+
+    snap = snapshots[0]
+    assert snap["has_new"]
+    assert not snap["has_old"], "old/ must not be present in workspace"
+    assert "new.js" in snap["new_files"]
+
+
+def test_analyze_smoke_canary_file_is_present_in_workspace(tmp_path, mocker):
+    """Canary: workspace/new/ must contain package source at opencode invocation time.
+
+    If this test fails, opencode is running in an empty workspace and cannot
+    examine the package codebase — the core analysis capability is broken.
+    """
+    new_root = tmp_path / "new_root"
+    new_root.mkdir()
+    (new_root / "SMOKE_TEST.md").write_text(
+        "If you can read this file, respond with CONFIRMED.", encoding="utf-8"
+    )
+
+    snapshots: list[dict] = []
+    mocker.patch("subprocess.run", side_effect=_capturing_run(snapshots))
+    mocker.patch("scm.analyzer.Path.home", return_value=Path("/nonexistent-home"))
+
+    analyze(
+        release=_make_release(),
+        old_artifact=_make_artifact("1.0.0"),
+        new_artifact=_make_artifact("1.0.1"),
+        old_root=None,
+        new_root=new_root,
+        changed_files=[],
+        added_files=[],
+    )
+
+    snap = snapshots[0]
+    assert snap["has_new"], (
+        "Canary file missing from workspace — opencode cannot see the package source tree"
+    )
+    assert "SMOKE_TEST.md" in snap["new_files"]
+
+
+def test_analyze_skips_copy_when_trees_exceed_size_limit(tmp_path, mocker):
+    """When the new tree exceeds 1 GB, workspace/new/ must not be created."""
+    new_root = tmp_path / "new_root"
+    new_root.mkdir()
+    (new_root / "big.js").write_text("x", encoding="utf-8")
+
+    # Simulate a tree that's just over 1 GB
+    mocker.patch("scm.analyzer._tree_size", return_value=1_000_000_001)
+
+    snapshots: list[dict] = []
+    mocker.patch("subprocess.run", side_effect=_capturing_run(snapshots))
+    mocker.patch("scm.analyzer.Path.home", return_value=Path("/nonexistent-home"))
+
+    analyze(
+        release=_make_release(),
+        old_artifact=_make_artifact("1.0.0"),
+        new_artifact=_make_artifact("1.0.1"),
+        old_root=None,
+        new_root=new_root,
+        changed_files=[],
+        added_files=[],
+    )
+
+    # opencode still ran (verdict returned), but no source tree was copied
+    assert not snapshots[0]["has_new"]

@@ -33,7 +33,7 @@ class StoredArtifact:
 @dataclass
 class Verdict:
     release: Release
-    old_artifact: StoredArtifact
+    old_artifact: StoredArtifact | None
     new_artifact: StoredArtifact
     result: str  # "malicious" | "benign" | "unknown" | "error"
     confidence: str  # "high" | "medium" | "low" | "unknown"

@@ -537,6 +537,7 @@ class ScanManager:
                 analyzer_model=analyzer_model,
                 analyzer_prompt=analyzer_prompt,
                 scanners=scanners,
+                force=True,
             )
             with self._lock:
                 self._processed += 1

@@ -461,3 +461,31 @@ def test_get_package_history_includes_new_path(tmp_path):
     assert len(rows) == 1
     assert "new_path" in rows[0]
     assert rows[0]["new_path"] == "/tmp/express-5.0.0.tgz"
+
+
+def test_get_package_history_includes_verdict_id(tmp_path):
+    """Each row in get_package_history includes a unique verdict_id."""
+    conn = _conn(tmp_path)
+    vid1 = _seed_one(conn, ecosystem="npm", package="express", version="4.0.0")
+    vid2 = _seed_one(conn, ecosystem="npm", package="express", version="5.0.0")
+
+    rows = get_package_history(conn, "npm", "express")
+    assert len(rows) == 2
+    verdict_ids = {r["verdict_id"] for r in rows}
+    assert verdict_ids == {vid1, vid2}
+
+
+def test_get_package_history_verdict_id_distinguishes_same_version_rescans(tmp_path):
+    """Two scans of the same version produce two rows with distinct verdict_ids."""
+    conn = _conn(tmp_path)
+    r = _release(ecosystem="npm", package="express", version="5.0.0")
+    rid = upsert_release(conn, r)
+    save_artifacts(conn, rid, _artifact("4.0.0"), _artifact("5.0.0"))
+    v = _verdict(r, result="benign")
+    vid1 = save_verdict(conn, rid, v)
+    vid2 = save_verdict(conn, rid, v)
+
+    rows = get_package_history(conn, "npm", "express")
+    assert len(rows) == 2
+    assert rows[0]["verdict_id"] != rows[1]["verdict_id"]
+    assert {rows[0]["verdict_id"], rows[1]["verdict_id"]} == {vid1, vid2}

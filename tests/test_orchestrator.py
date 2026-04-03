@@ -241,6 +241,58 @@ def test_process_release_sets_previous_version_on_release(tmp_path, mocker):
     assert release.previous_version == "4.19.0"
 
 
+def test_process_release_force_skips_previous_version_lookup(tmp_path, mocker):
+    """When force=True, get_previous_version is never called and a verdict is saved."""
+    release = _make_release()
+    collector = _make_collector(previous_version=None)  # would normally cause skip
+    notifier = _make_notifier()
+    conn = _make_conn(tmp_path)
+
+    new_art = _make_artifact("5.0.0")
+    verdict = Verdict(
+        release=release,
+        old_artifact=None,
+        new_artifact=new_art,
+        result="benign",
+        confidence="high",
+        summary="clean",
+        analysis="no issues",
+        analyzed_at=datetime.now(timezone.utc),
+    )
+
+    mocker.patch("scm.orchestrator.db_module.upsert_release", return_value=1)
+    mocker.patch(
+        "scm.orchestrator.storage_module.download_tarball",
+        return_value=new_art,
+    )
+    mocker.patch("scm.orchestrator.db_module.save_artifacts")
+    mocker.patch(
+        "scm.orchestrator.tempfile.mkdtemp", return_value=str(tmp_path / "td_f")
+    )
+    (tmp_path / "td_f").mkdir()
+    mocker.patch("scm.orchestrator.shutil.rmtree")
+    mocker.patch(
+        "scm.orchestrator.extractor_module.safe_extract",
+        return_value=tmp_path / "td_f" / "new",
+    )
+    mocker.patch("scm.orchestrator.extractor_module.collect_files", return_value={})
+    mocker.patch("scm.orchestrator.analyzer_module.analyze", return_value=verdict)
+    mock_save_verdict = mocker.patch(
+        "scm.orchestrator.db_module.save_verdict", return_value=1
+    )
+    mocker.patch("scm.orchestrator.db_module.save_alert")
+
+    _process_release(
+        release, collector, [notifier], conn, analyze_timeout=30, force=True
+    )
+
+    # get_previous_version must NOT have been called
+    collector.get_previous_version.assert_not_called()
+    # verdict must still be saved
+    mock_save_verdict.assert_called_once()
+    notifier.notify.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # run()
 # ---------------------------------------------------------------------------

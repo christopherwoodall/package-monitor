@@ -43,19 +43,34 @@ def _process_release(
     analyzer_model: str | None = None,
     analyzer_prompt: str | None = None,
     scanners: list[Scanner] | None = None,
+    force: bool = False,
 ) -> None:
-    """Full pipeline for a single release.  Raises on unrecoverable error."""
+    """Full pipeline for a single release.  Raises on unrecoverable error.
+
+    When *force* is True the previous-version lookup is skipped and the
+    release is analysed with new/ only (no diff).  This is used by the
+    dashboard force-scan path so that a rescan always produces a verdict
+    even when no previous version can be resolved from the registry.
+    """
     pkg = release.package
     new_ver = release.version
     eco = release.ecosystem
 
     # ── resolve previous version ────────────────────────────────────────────
-    previous_version = collector.get_previous_version(pkg, new_ver)
-    if previous_version is None:
-        log.info("[%s] skipping %s@%s — no previous version", eco, pkg, new_ver)
-        return
-
-    release.previous_version = previous_version
+    if force:
+        previous_version: str | None = None
+        log.info(
+            "[%s] force-scan %s@%s — skipping previous-version lookup",
+            eco,
+            pkg,
+            new_ver,
+        )
+    else:
+        previous_version = collector.get_previous_version(pkg, new_ver)
+        if previous_version is None:
+            log.info("[%s] skipping %s@%s — no previous version", eco, pkg, new_ver)
+            return
+        release.previous_version = previous_version
 
     # ── persist release ──────────────────────────────────────────────────────
     try:
@@ -75,14 +90,18 @@ def _process_release(
 
     # ── download tarballs ────────────────────────────────────────────────────
     try:
-        old_artifact = storage_module.download_tarball(eco, pkg, previous_version)
+        old_artifact = (
+            storage_module.download_tarball(eco, pkg, previous_version)
+            if previous_version is not None
+            else None
+        )
         new_artifact = storage_module.download_tarball(eco, pkg, new_ver)
     except DownloadError as exc:
         log.exception(
             "[%s] download failed  %s  %s→%s: %s",
             eco,
             pkg,
-            previous_version,
+            previous_version or "(none)",
             new_ver,
             exc,
         )
@@ -93,22 +112,25 @@ def _process_release(
     # ── extract tarballs ─────────────────────────────────────────────────────
     tmpdir = Path(tempfile.mkdtemp())
     try:
-        old_dest = tmpdir / "old"
         new_dest = tmpdir / "new"
-        old_dest.mkdir()
         new_dest.mkdir()
-
-        log.debug("extracting old  %s", old_artifact.path)
-        old_root = extractor_module.safe_extract(old_artifact.path, old_dest)
         log.debug("extracting new  %s", new_artifact.path)
         new_root = extractor_module.safe_extract(new_artifact.path, new_dest)
 
-        old_files = extractor_module.collect_files(old_root)
+        old_root: Path | None = None
+        old_files: dict[str, Path] = {}
+        if old_artifact is not None:
+            old_dest = tmpdir / "old"
+            old_dest.mkdir()
+            log.debug("extracting old  %s", old_artifact.path)
+            old_root = extractor_module.safe_extract(old_artifact.path, old_dest)
+            old_files = extractor_module.collect_files(old_root)
+
         new_files = extractor_module.collect_files(new_root)
         log.info(
             "extracted %s@%s → %s  (%d old files, %d new files)",
             pkg,
-            previous_version,
+            previous_version or "(none)",
             new_ver,
             len(old_files),
             len(new_files),
@@ -148,7 +170,7 @@ def _process_release(
         "[%s] %s  %s→%s  |  %s (%s)  |  rank #%d",
         eco,
         pkg,
-        previous_version,
+        previous_version or "(none)",
         new_ver,
         verdict.result.upper(),
         verdict.confidence,

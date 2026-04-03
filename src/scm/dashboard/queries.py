@@ -190,6 +190,7 @@ def get_package_history(
     rows = conn.execute(
         """
         SELECT
+            v.id          AS verdict_id,
             r.package, r.version, r.ecosystem, r.rank,
             v.result, v.confidence, v.summary, v.analyzed_at,
             old_a.sha256  AS old_sha256,
