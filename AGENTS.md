@@ -248,11 +248,37 @@ workspace/
 └── new/                  ← full extracted new release tree (copied via shutil.copytree)
 ```
 
-`new/` is absent if the tree size exceeds `_WORKSPACE_SIZE_LIMIT_BYTES` (1 GB).
+`new/` is absent if the tree size exceeds `_WORKSPACE_SIZE_LIMIT_BYTES` (10 GB).
 In that case opencode analyses `scanner_findings.md` alone and a warning is logged.
 
 The old release tree is **not** copied into the workspace — opencode only examines
 the new release. The diff scanner captures old-vs-new changes in `scanner_findings.md`.
+
+### Scanner output contract
+
+Scanners **must** always return a non-empty markdown string:
+
+* **Findings present**: Return formatted markdown with findings (diff tables,
+  base64 hits, binary strings output, etc.)
+* **No findings**: Return an explanatory message (e.g., "No Base64-encoded
+  strings detected in changed/added files")
+* **Tool unavailable or crash**: **Raise an exception** — never return empty
+  string on error
+
+`analyzer.analyze()` unconditionally writes `scanner_findings.md` with scanner
+output (or a "No scanner output" placeholder). This guarantees opencode always
+finds the file it expects, eliminating the confusing "File not found" error
+that previously appeared in opencode output when scanners returned empty
+strings.
+
+This contract means:
+- **DiffScanner**: Returns explanatory text when `old_root is None` (force-scan
+  with no previous version to diff against)
+- **Base64Scanner**: Returns "No Base64-encoded strings detected..." when no
+  long base64 strings found
+- **BinaryStringsScanner**: Returns "No binary files with extractable strings
+  found..." when no binaries present; raises `RuntimeError` if `strings` binary
+  not available or subprocess fails
 
 The workspace is cleaned up unconditionally in the `finally` block of
 `analyze()` — immediately after `run_opencode()` returns. The orchestrator's
@@ -654,6 +680,12 @@ Pass a shared explicit timestamp in equality tests.
 `LocalNotifier` renders markdown. Read the actual source before writing
 string-match assertions.
 
+**Scanner tests check for "no findings" messages, not empty strings.**
+Scanners now return descriptive messages when they find nothing (e.g.,
+"No Base64-encoded strings detected"). Tests assert these messages are
+present rather than checking for `== ""`. This documents the scanner's
+behavior and ensures the output contract is maintained.
+
 ### Concurrency
 
 **`ScanManager` is one global instance per Flask app.**
@@ -695,6 +727,15 @@ route `/api/scan/history` exposes this list as JSON.
 `Release` directly and runs `orchestrator._process_release` in a background
 thread. Useful for re-scanning a specific package@version without waiting for
 the collector to detect it via the changes feed or XMLRPC.
+
+**`POST /api/scan/force-url` scans by package URL.**
+Accepts `{url}` and optionally `notifiers`, `workers`, `analyze_timeout`.
+Parses npmjs.com, registry.npmjs.org, pypi.org, pypi.python.org, test.pypi.org
+URLs to extract ecosystem, package name, and version (resolving latest from
+registry if version not in URL). Returns 202 with resolved details
+(`ecosystem`, `package`, `version`, `resolved_from: "url" | "latest"`),
+400 for unsupported URLs, 404 if package not found, 409 if scan already running.
+The dashboard UI has a "Force-scan by URL" section on the `/scan` page.
 
 **`package.html` has a "re-scan" button per version row (Actions column).**
 Clicking "re-scan" POSTs to `/api/scan/force` with the page's ecosystem/package
@@ -801,6 +842,7 @@ package-monitor/
     │   ├── app.py              Flask app factory, routes, cron API, settings API, CLI entry point
     │   ├── queries.py          read-only SQL queries for the UI
     │   ├── scanner.py          ScanManager — background scan coordination
+    │   ├── url_parser.py       parse_package_url() — URL → (ecosystem, package, version)
     │   └── templates/
     │       ├── base.html       two-column flex layout, includes _sidebar.html
     │       ├── _sidebar.html   shared sidebar partial (Dashboard, Run Scan, Settings nav)
