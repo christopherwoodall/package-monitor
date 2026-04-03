@@ -105,12 +105,22 @@ def create_app(
     def package_detail(ecosystem: str, name: str) -> str:
         conn = _get_conn()
         history = queries.get_package_history(conn, ecosystem, name)
+        repo_url = _get_repo_url(ecosystem, name)
         return render_template(
             "package.html",
             ecosystem=ecosystem,
             package=name,
             history=history,
+            repo_url=repo_url,
         )
+
+    def _get_repo_url(ecosystem: str, package: str) -> str | None:
+        """Return the repository URL for a package."""
+        if ecosystem == "npm":
+            return f"https://www.npmjs.com/package/{package}"
+        elif ecosystem == "pypi":
+            return f"https://pypi.org/project/{package}/"
+        return None
 
     @app.route("/scan")
     def scan_page() -> str:
