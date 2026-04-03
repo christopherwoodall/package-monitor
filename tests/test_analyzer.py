@@ -21,6 +21,17 @@ from scm.models import Release, StoredArtifact, Verdict
 
 
 # ---------------------------------------------------------------------------
+# Module-wide fixture: skip the cleanup delay so tests stay fast
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _no_cleanup_delay(mocker):
+    """Patch time.sleep in analyzer so the 5-second post-opencode delay is skipped."""
+    mocker.patch("scm.analyzer.time.sleep")
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -680,13 +691,14 @@ def test_analyze_smoke_canary_file_is_present_in_workspace(tmp_path, mocker):
 
 
 def test_analyze_skips_copy_when_trees_exceed_size_limit(tmp_path, mocker):
-    """When the new tree exceeds 1 GB, workspace/new/ must not be created."""
+    """When the new tree exceeds 10 GB, workspace/new/ must not be created."""
     new_root = tmp_path / "new_root"
     new_root.mkdir()
     (new_root / "big.js").write_text("x", encoding="utf-8")
 
-    # Simulate a tree that's just over 1 GB
-    mocker.patch("scm.analyzer._tree_size", return_value=1_000_000_001)
+    # Simulate a tree that's just over 10 GB
+    mocker.patch("scm.analyzer._tree_size", return_value=10_000_000_001)
+    mocker.patch("scm.analyzer.time.sleep")  # skip cleanup delay
 
     snapshots: list[dict] = []
     mocker.patch("subprocess.run", side_effect=_capturing_run(snapshots))

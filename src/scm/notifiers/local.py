@@ -36,7 +36,7 @@ class LocalNotifier(Notifier):
                 f"**Ecosystem:** {release.ecosystem}  **Rank:** #{release.rank}\n"
                 f"**Verdict:** {verdict.result.upper()}  **Confidence:** {verdict.confidence}\n"
                 f"**Analyzed:** {verdict.analyzed_at.isoformat()}\n"
-                f"**Old SHA-256:** `{verdict.old_artifact.sha256}`\n"
+                f"**Old SHA-256:** `{verdict.old_artifact.sha256 if verdict.old_artifact else 'N/A'}`\n"
                 f"**New SHA-256:** `{verdict.new_artifact.sha256}`\n\n"
                 f"## Summary\n\n{verdict.summary}\n\n"
                 f"## Full Analysis\n\n{verdict.analysis}\n"

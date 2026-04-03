@@ -92,6 +92,35 @@
     </form>
   </section>
 
+  <!-- ── Section: Force-scan by URL ──────────────────────────────────────── -->
+  <section>
+    <h2 class="text-base font-semibold text-gray-200 mb-1">Force-scan by URL</h2>
+    <p class="text-sm text-gray-500 mb-4">
+      Paste any package registry URL — ecosystem, package name, and version are resolved automatically.
+      If the URL contains no version the latest published version is used.
+    </p>
+    <form id="url-force-form" class="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
+      <div>
+        <label class="block text-xs text-gray-400 uppercase tracking-widest mb-2">Package URL</label>
+        <input type="url" name="url" id="url-force-input"
+               placeholder="https://www.npmjs.com/package/lodash"
+               class="bg-gray-800 border border-gray-700 text-gray-200 rounded px-3 py-1.5 w-full text-sm font-mono" />
+        <p class="text-xs text-gray-600 mt-1.5">
+          Supports: npmjs.com, registry.npmjs.org, pypi.org, pypi.python.org, test.pypi.org
+        </p>
+      </div>
+      <!-- Resolved info shown after a successful lookup -->
+      <div id="url-resolve-info" class="hidden text-xs text-gray-500 font-mono bg-gray-800 border border-gray-700 rounded px-3 py-2"></div>
+      <div class="flex items-center gap-3 pt-1">
+        <button type="submit" id="url-force-btn"
+                class="bg-indigo-700 hover:bg-indigo-600 text-white text-sm px-5 py-2 rounded-md transition">
+          Scan from URL
+        </button>
+        <span id="url-force-msg" class="text-sm text-gray-500"></span>
+      </div>
+    </form>
+  </section>
+
   <!-- ── Section: Force-scan a package ────────────────────────────────────── -->
   <section>
     <h2 class="text-base font-semibold text-gray-200 mb-1">Force-scan a specific package</h2>
@@ -342,7 +371,8 @@ async function pollStatus() {
 function setScanningState(scanning) {
   const btn = document.getElementById('scan-btn');
   const forceBtn = document.getElementById('force-btn');
-  [btn, forceBtn].forEach(b => {
+  const urlForceBtn = document.getElementById('url-force-btn');
+  [btn, forceBtn, urlForceBtn].forEach(b => {
     b.disabled = scanning;
     b.classList.toggle('opacity-50', scanning);
     b.classList.toggle('cursor-not-allowed', scanning);
@@ -398,6 +428,48 @@ document.getElementById('scan-form').addEventListener('submit', async (e) => {
     setMsg('scan-msg', 'A scan is already running.', 'text-yellow-400');
   } else {
     setMsg('scan-msg', `Error ${resp.status}`, 'text-red-400');
+  }
+});
+
+// ── Force-scan by URL ────────────────────────────────────────────────────────
+
+document.getElementById('url-force-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = document.getElementById('url-force-input').value.trim();
+  const infoEl = document.getElementById('url-resolve-info');
+
+  if (!url) {
+    setMsg('url-force-msg', 'Please enter a package URL.', 'text-yellow-400');
+    return;
+  }
+
+  infoEl.classList.add('hidden');
+  infoEl.textContent = '';
+  setMsg('url-force-msg', 'Resolving…', 'text-gray-500');
+
+  const resp = await fetch('/api/scan/force-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+
+  const data = await resp.json().catch(() => ({}));
+
+  if (resp.status === 202) {
+    const versionNote = data.resolved_from === 'latest' ? ' (latest)' : '';
+    infoEl.textContent = `→ ${data.ecosystem}  ${data.package}@${data.version}${versionNote}`;
+    infoEl.classList.remove('hidden');
+    setMsg('url-force-msg', 'Scan started.', 'text-green-400');
+    pollStatus();
+    pollTimer = setInterval(pollStatus, 2000);
+  } else if (resp.status === 409) {
+    setMsg('url-force-msg', 'A scan is already running.', 'text-yellow-400');
+  } else if (resp.status === 404) {
+    setMsg('url-force-msg', data.error || 'Package not found.', 'text-red-400');
+  } else if (resp.status === 400) {
+    setMsg('url-force-msg', data.error || 'Unsupported URL.', 'text-red-400');
+  } else {
+    setMsg('url-force-msg', data.error || `Error ${resp.status}`, 'text-red-400');
   }
 });
 

@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -38,9 +39,15 @@ __all__ = [
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[^a-zA-Z]*[a-zA-Z]")
 
-# Maximum combined byte size of old+new package trees copied into the workspace.
+# Maximum byte size of the new package tree copied into the workspace.
 # Packages exceeding this limit are analysed on scanner_findings.md alone.
-_WORKSPACE_SIZE_LIMIT_BYTES = 1_000_000_000  # 1 GB
+_WORKSPACE_SIZE_LIMIT_BYTES = 10_000_000_000  # 10 GB
+
+# Seconds to wait after opencode returns before deleting the workspace.
+# opencode may spawn background processes that still hold file handles briefly
+# after the main subprocess exits; this delay prevents a race where the
+# workspace is removed before those processes finish reading it.
+_WORKSPACE_CLEANUP_DELAY_SECONDS = 5
 
 
 def strip_ansi(text: str) -> str:
@@ -64,15 +71,15 @@ def _copy_tree_into_workspace(new_root: Path, workspace: Path) -> None:
 
     if size > _WORKSPACE_SIZE_LIMIT_BYTES:
         log.warning(
-            "new package tree is %d bytes — exceeds %d byte limit; "
+            "new package tree is %.1f GB — exceeds %.0f GB limit; "
             "skipping copy into workspace (opencode will analyse findings only)",
-            size,
-            _WORKSPACE_SIZE_LIMIT_BYTES,
+            size / 1_000_000_000,
+            _WORKSPACE_SIZE_LIMIT_BYTES / 1_000_000_000,
         )
         return
 
     shutil.copytree(new_root, workspace / "new")
-    log.debug("copied new tree into workspace (%d bytes)", size)
+    log.debug("copied new tree into workspace (%.1f MB)", size / 1_000_000)
 
 
 # ---------------------------------------------------------------------------
@@ -277,5 +284,6 @@ def analyze(
             opencode_log_path=opencode_log_path,
         )
     finally:
+        time.sleep(_WORKSPACE_CLEANUP_DELAY_SECONDS)
         shutil.rmtree(workspace, ignore_errors=True)
         log.debug("cleaned workspace %s", workspace)

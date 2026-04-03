@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from scm.dashboard.app import create_app
 
@@ -31,21 +32,50 @@ def binaries_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def app(db_conn, tmp_path: Path, reports_dir: Path):
-    """Minimal Flask test app wired to a temp DB and temp reports dir."""
+def config_path(tmp_path: Path) -> Path:
+    """A minimal config.yaml with a non-default analyze_timeout so tests can
+    assert that the API reads from the file rather than using a hardcoded default."""
+    cfg = {
+        "db": "scm.db",
+        "top": 500,
+        "new_limit": 50,
+        "interval": 120,
+        "workers": 2,
+        "analyze_timeout": 600,
+        "log_level": "INFO",
+        "ecosystems": ["npm"],
+        "notifiers": ["local"],
+        "dashboard": {"host": "0.0.0.0", "port": 5000},
+        "analyzer": {
+            "model": "test-model",
+            "prompt": "test prompt",
+        },
+    }
+    p = tmp_path / "config.yaml"
+    p.write_text(yaml.dump(cfg), encoding="utf-8")
+    return p
+
+
+@pytest.fixture()
+def app(db_conn, tmp_path: Path, reports_dir: Path, config_path: Path):
+    """Minimal Flask test app wired to a temp DB, temp reports dir, and temp config."""
     from scm import db as db_module
 
     db_path = tmp_path / "test.db"
     conn = db_module.init_db(db_path)
     conn.close()
 
-    flask_app = create_app(db_path=db_path, reports_root=reports_dir)
+    flask_app = create_app(
+        db_path=db_path, reports_root=reports_dir, config_path=config_path
+    )
     flask_app.config["TESTING"] = True
     return flask_app
 
 
 @pytest.fixture()
-def app_with_binaries(db_conn, tmp_path: Path, reports_dir: Path, binaries_dir: Path):
+def app_with_binaries(
+    db_conn, tmp_path: Path, reports_dir: Path, binaries_dir: Path, config_path: Path
+):
     """Flask test app also wired to a temp binaries dir (for /binary tests)."""
     from scm import db as db_module
 
@@ -54,7 +84,10 @@ def app_with_binaries(db_conn, tmp_path: Path, reports_dir: Path, binaries_dir: 
     conn.close()
 
     flask_app = create_app(
-        db_path=db_path, reports_root=reports_dir, binaries_root=binaries_dir
+        db_path=db_path,
+        reports_root=reports_dir,
+        binaries_root=binaries_dir,
+        config_path=config_path,
     )
     flask_app.config["TESTING"] = True
     return flask_app
@@ -613,3 +646,270 @@ def test_api_settings_whitespace_prompt_returns_400(client):
     assert resp.status_code == 400
     data = resp.get_json()
     assert "analyzer_prompt" in data.get("error", "")
+
+
+# ---------------------------------------------------------------------------
+# config.yaml is the source of truth for API defaults
+# ---------------------------------------------------------------------------
+
+
+def test_api_scan_start_uses_config_defaults(client, app, mocker):
+    """api_scan_start must read all defaults from config.yaml, not hardcode them."""
+    mgr = app.config["SCAN_MANAGER"]
+    mocker.patch.object(mgr, "start", return_value=True)
+
+    # Post an empty body — everything should come from config.yaml (config_path fixture)
+    client.post("/api/scan/start", data=json.dumps({}), content_type="application/json")
+
+    kw = mgr.start.call_args.kwargs
+    assert kw["analyze_timeout"] == 600  # config.yaml value, not hardcoded 300
+    assert kw["workers"] == 2  # config.yaml value, not hardcoded 4
+    assert kw["top_n"] == 500  # config.yaml value, not hardcoded 1000
+    assert kw["new_limit"] == 50  # config.yaml value, not hardcoded 100
+    assert kw["ecosystems"] == ["npm"]  # config.yaml value
+    assert kw["notifier_names"] == ["local"]
+    assert kw["analyzer_model"] == "test-model"
+    assert kw["analyzer_prompt"] == "test prompt"
+
+
+def test_api_scan_start_request_body_overrides_config(client, app, mocker):
+    """Values in the request body must override config.yaml defaults."""
+    mgr = app.config["SCAN_MANAGER"]
+    mocker.patch.object(mgr, "start", return_value=True)
+
+    client.post(
+        "/api/scan/start",
+        data=json.dumps({"analyze_timeout": 999, "workers": 8, "top_n": 42}),
+        content_type="application/json",
+    )
+
+    kw = mgr.start.call_args.kwargs
+    assert kw["analyze_timeout"] == 999
+    assert kw["workers"] == 8
+    assert kw["top_n"] == 42
+
+
+def test_api_scan_force_uses_config_defaults(client, app, mocker):
+    """api_scan_force must read analyze_timeout and workers from config.yaml."""
+    mgr = app.config["SCAN_MANAGER"]
+    mocker.patch.object(mgr, "force_scan_package", return_value=True)
+
+    client.post(
+        "/api/scan/force",
+        data=json.dumps(
+            {"ecosystem": "npm", "package": "lodash", "version": "4.17.22"}
+        ),
+        content_type="application/json",
+    )
+
+    kw = mgr.force_scan_package.call_args.kwargs
+    assert kw["analyze_timeout"] == 600  # config.yaml value, not hardcoded 300
+    assert kw["workers"] == 2  # config.yaml value, not hardcoded 4
+    assert kw["notifier_names"] == ["local"]
+    assert kw["analyzer_model"] == "test-model"
+    assert kw["analyzer_prompt"] == "test prompt"
+
+
+def test_api_scan_force_request_body_overrides_config(client, app, mocker):
+    """Values in the request body must override config.yaml defaults."""
+    mgr = app.config["SCAN_MANAGER"]
+    mocker.patch.object(mgr, "force_scan_package", return_value=True)
+
+    client.post(
+        "/api/scan/force",
+        data=json.dumps(
+            {
+                "ecosystem": "npm",
+                "package": "lodash",
+                "version": "4.17.22",
+                "analyze_timeout": 120,
+                "workers": 1,
+            }
+        ),
+        content_type="application/json",
+    )
+
+    kw = mgr.force_scan_package.call_args.kwargs
+    assert kw["analyze_timeout"] == 120
+    assert kw["workers"] == 1
+
+
+def test_api_delete_verdict_removes_scan(client, app):
+    """DELETE /api/verdicts/<id> removes the verdict and returns 200."""
+    from datetime import datetime, timezone
+
+    from scm import db as db_module
+    from scm.models import Alert, Release, StoredArtifact, Verdict
+
+    conn = db_module.init_db(app.config["DB_PATH"])
+
+    # Seed a release
+    release = Release(
+        ecosystem="npm",
+        package="test-pkg",
+        version="1.0.0",
+        previous_version=None,
+        rank=1,
+        discovered_at=datetime.now(timezone.utc),
+    )
+    release_id = db_module.upsert_release(conn, release)
+
+    # Seed artifacts
+    old_art = StoredArtifact(
+        ecosystem="npm",
+        package="test-pkg",
+        version="0.9.0",
+        filename="test-pkg-0.9.0.tgz",
+        path=Path("/binaries/test-pkg-0.9.0.tgz"),
+        sha256="a" * 64,
+        size_bytes=512,
+    )
+    new_art = StoredArtifact(
+        ecosystem="npm",
+        package="test-pkg",
+        version="1.0.0",
+        filename="test-pkg-1.0.0.tgz",
+        path=Path("/binaries/test-pkg-1.0.0.tgz"),
+        sha256="b" * 64,
+        size_bytes=1024,
+    )
+    db_module.save_artifacts(conn, release_id, old_art, new_art)
+
+    # Seed verdict
+    verdict = Verdict(
+        release=release,
+        old_artifact=old_art,
+        new_artifact=new_art,
+        result="benign",
+        confidence="high",
+        summary="test summary",
+        analysis="test analysis",
+        analyzed_at=datetime.now(timezone.utc),
+    )
+    verdict_id = db_module.save_verdict(conn, release_id, verdict)
+    conn.close()
+
+    # Delete the verdict
+    resp = client.delete(f"/api/verdicts/{verdict_id}")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "deleted"
+    assert data["id"] == verdict_id
+
+    # Verify it's gone
+    conn = db_module.init_db(app.config["DB_PATH"])
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM verdicts WHERE id = ?", (verdict_id,)
+    ).fetchone()
+    conn.close()
+    assert row["cnt"] == 0
+
+
+def test_api_delete_verdict_returns_404_for_nonexistent(client):
+    """DELETE /api/verdicts/<id> returns 404 when the verdict doesn't exist."""
+    resp = client.delete("/api/verdicts/99999")
+    assert resp.status_code == 404
+    assert "not found" in resp.get_json().get("error", "").lower()
+
+
+def test_api_delete_verdict_only_affects_target(client, app):
+    """DELETE /api/verdicts/<id> removes only the specified verdict."""
+    from datetime import datetime, timezone
+
+    from scm import db as db_module
+    from scm.models import Alert, Release, StoredArtifact, Verdict
+
+    conn = db_module.init_db(app.config["DB_PATH"])
+
+    # Seed two releases with verdicts
+    verdict_ids = []
+    for version in ["1.0.0", "2.0.0"]:
+        release = Release(
+            ecosystem="npm",
+            package="test-pkg",
+            version=version,
+            previous_version=None,
+            rank=1,
+            discovered_at=datetime.now(timezone.utc),
+        )
+        release_id = db_module.upsert_release(conn, release)
+
+        new_art = StoredArtifact(
+            ecosystem="npm",
+            package="test-pkg",
+            version=version,
+            filename=f"test-pkg-{version}.tgz",
+            path=Path(f"/binaries/test-pkg-{version}.tgz"),
+            sha256="a" * 64,
+            size_bytes=512,
+        )
+        db_module.save_artifacts(conn, release_id, None, new_art)
+
+        verdict = Verdict(
+            release=release,
+            old_artifact=None,
+            new_artifact=new_art,
+            result="benign",
+            confidence="high",
+            summary="test",
+            analysis="test",
+            analyzed_at=datetime.now(timezone.utc),
+        )
+        vid = db_module.save_verdict(conn, release_id, verdict)
+        verdict_ids.append(vid)
+
+    conn.close()
+
+    # Delete only the first verdict
+    resp = client.delete(f"/api/verdicts/{verdict_ids[0]}")
+    assert resp.status_code == 200
+
+    # Verify first is gone, second remains
+    conn = db_module.init_db(app.config["DB_PATH"])
+    rows = conn.execute(
+        "SELECT id FROM verdicts WHERE id IN (?, ?)", (verdict_ids[0], verdict_ids[1])
+    ).fetchall()
+    conn.close()
+    remaining_ids = {r["id"] for r in rows}
+    assert verdict_ids[0] not in remaining_ids
+    assert verdict_ids[1] in remaining_ids
+
+
+def test_api_settings_roundtrip(client, app, config_path: Path):
+    """POST /api/settings writes config.yaml; a subsequent GET /settings reads it back."""
+    resp = client.post(
+        "/api/settings",
+        data=json.dumps(
+            {
+                "top": 250,
+                "interval": 60,
+                "workers": 3,
+                "analyze_timeout": 900,
+                "log_level": "DEBUG",
+                "ecosystems": "npm, pypi",
+                "notifiers": "local",
+                "analyzer_model": "new-model",
+                "analyzer_prompt": "new prompt",
+                "dashboard_host": "127.0.0.1",
+                "dashboard_port": 8080,
+            }
+        ),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+
+    # Re-read config.yaml and confirm values were written
+    from scm.config import load_config
+
+    cfg = load_config(config_path)
+    assert cfg.top == 250
+    assert cfg.interval == 60
+    assert cfg.workers == 3
+    assert cfg.analyze_timeout == 900
+    assert cfg.log_level == "DEBUG"
+    assert cfg.ecosystems == ["npm", "pypi"]
+    assert cfg.analyzer_model == "new-model"
+    assert cfg.analyzer_prompt == "new prompt"
+    assert cfg.dashboard_host == "127.0.0.1"
+    assert cfg.dashboard_port == 8080

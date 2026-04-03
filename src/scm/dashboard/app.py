@@ -27,6 +27,7 @@ from scm.config import (
 )
 from scm.dashboard import queries
 from scm.dashboard.scanner import ScanManager
+from scm.dashboard.url_parser import PackageNotFoundError, UnsupportedURLError
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +191,12 @@ def create_app(
         mgr: ScanManager = app.config["SCAN_MANAGER"]
         data = request.get_json(silent=True) or {}
 
-        raw_ecosystems = data.get("ecosystems", "npm,pypi")
+        try:
+            _cfg = load_config(app.config["CONFIG_PATH"])
+        except ConfigError:
+            _cfg = Config()
+
+        raw_ecosystems = data.get("ecosystems", _cfg.ecosystems)
         if isinstance(raw_ecosystems, list):
             ecosystems = [e.strip() for e in raw_ecosystems if e.strip()]
         else:
@@ -198,7 +204,7 @@ def create_app(
                 e.strip() for e in str(raw_ecosystems).split(",") if e.strip()
             ]
 
-        raw_notifiers = data.get("notifiers", ["local"])
+        raw_notifiers = data.get("notifiers", _cfg.notifiers)
         if isinstance(raw_notifiers, list):
             notifier_names = [n.strip() for n in raw_notifiers if n.strip()]
         else:
@@ -206,19 +212,13 @@ def create_app(
                 n.strip() for n in str(raw_notifiers).split(",") if n.strip()
             ]
 
-        top_n = int(data.get("top_n", 1000))
+        top_n = int(data.get("top_n", _cfg.top))
         # new_only=true (or top_n explicitly 0) means watch all new releases
         if data.get("new_only") or top_n == 0:
             top_n = 0
-        new_limit = int(data.get("new_limit", 100))
-        workers = int(data.get("workers", 4))
-        analyze_timeout = int(data.get("analyze_timeout", 300))
-
-        # Read analyzer settings from config.yaml (falls back to defaults if missing)
-        try:
-            _cfg = load_config(app.config["CONFIG_PATH"])
-        except ConfigError:
-            _cfg = Config()
+        new_limit = int(data.get("new_limit", _cfg.new_limit))
+        workers = int(data.get("workers", _cfg.workers))
+        analyze_timeout = int(data.get("analyze_timeout", _cfg.analyze_timeout))
 
         started = mgr.start(
             db_path=app.config["DB_PATH"],
@@ -279,9 +279,9 @@ def create_app(
                 "ecosystem": "npm",
                 "package":   "lodash",
                 "version":   "4.17.22",
-                "notifiers": ["local"],   // optional
-                "analyze_timeout": 300,   // optional
-                "workers": 4              // optional
+                "notifiers": ["local"],   // optional, defaults to config.yaml
+                "analyze_timeout": 300,   // optional, defaults to config.yaml
+                "workers": 4              // optional, defaults to config.yaml
             }
         """
         mgr: ScanManager = app.config["SCAN_MANAGER"]
@@ -296,7 +296,12 @@ def create_app(
                 {"error": "ecosystem, package and version are required"}
             ), 400
 
-        raw_notifiers = data.get("notifiers", ["local"])
+        try:
+            _cfg = load_config(app.config["CONFIG_PATH"])
+        except ConfigError:
+            _cfg = Config()
+
+        raw_notifiers = data.get("notifiers", _cfg.notifiers)
         if isinstance(raw_notifiers, list):
             notifier_names = [n.strip() for n in raw_notifiers if n.strip()]
         else:
@@ -304,14 +309,8 @@ def create_app(
                 n.strip() for n in str(raw_notifiers).split(",") if n.strip()
             ]
 
-        analyze_timeout = int(data.get("analyze_timeout", 300))
-        workers = int(data.get("workers", 4))
-
-        # Read analyzer settings from config.yaml (falls back to defaults if missing)
-        try:
-            _cfg = load_config(app.config["CONFIG_PATH"])
-        except ConfigError:
-            _cfg = Config()
+        analyze_timeout = int(data.get("analyze_timeout", _cfg.analyze_timeout))
+        workers = int(data.get("workers", _cfg.workers))
 
         started = mgr.force_scan_package(
             db_path=app.config["DB_PATH"],
@@ -332,6 +331,81 @@ def create_app(
                 {"status": "started", "package": package, "version": version}
             ), 202
         return jsonify({"status": "already_running"}), 409
+
+    @app.route("/api/scan/force-url", methods=["POST"])
+    def api_scan_force_url() -> Response:
+        """Force-scan a package identified by its registry URL.
+
+        Parses the URL to extract ecosystem/package, resolves the latest
+        version from the registry if the URL contains no version, then
+        delegates to the same force-scan pipeline as ``/api/scan/force``.
+
+        Body (JSON):
+            {
+                "url":            "https://www.npmjs.com/package/lodash",
+                "notifiers":      ["local"],   // optional
+                "analyze_timeout": 300,         // optional
+                "workers":         4            // optional
+            }
+
+        Responses:
+            202  {"status": "started", "ecosystem": ..., "package": ...,
+                  "version": ..., "resolved_from": "url" | "latest"}
+            400  {"error": "..."} — missing/unsupported URL
+            404  {"error": "..."} — package not found in registry
+            409  {"status": "already_running"}
+        """
+        mgr: ScanManager = app.config["SCAN_MANAGER"]
+        data = request.get_json(silent=True) or {}
+
+        url = (data.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url is required"}), 400
+
+        try:
+            _cfg = load_config(app.config["CONFIG_PATH"])
+        except ConfigError:
+            _cfg = Config()
+
+        raw_notifiers = data.get("notifiers", _cfg.notifiers)
+        if isinstance(raw_notifiers, list):
+            notifier_names = [n.strip() for n in raw_notifiers if n.strip()]
+        else:
+            notifier_names = [
+                n.strip() for n in str(raw_notifiers).split(",") if n.strip()
+            ]
+
+        analyze_timeout = int(data.get("analyze_timeout", _cfg.analyze_timeout))
+        workers = int(data.get("workers", _cfg.workers))
+
+        try:
+            parsed = mgr.force_scan_url(
+                db_path=app.config["DB_PATH"],
+                url=url,
+                workers=workers,
+                analyze_timeout=analyze_timeout,
+                notifier_names=notifier_names,
+                analyzer_model=_cfg.analyzer_model or None,
+                analyzer_prompt=_cfg.analyzer_prompt or None,
+                enabled_scanners=_cfg.enabled_scanners,
+                scanner_config=_cfg.scanner_config,
+            )
+        except UnsupportedURLError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except PackageNotFoundError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except RuntimeError:
+            return jsonify({"status": "already_running"}), 409
+
+        return jsonify(
+            {
+                "status": "started",
+                "ecosystem": parsed.ecosystem,
+                "package": parsed.package,
+                "version": parsed.version,
+                "resolved_from": parsed.resolved_from,
+            }
+        ), 202
 
     # ------------------------------------------------------------------
     # Cron / service API routes
@@ -670,6 +744,19 @@ def create_app(
 
         log.info("config.yaml updated via settings API")
         return jsonify({"ok": True})
+
+    @app.route("/api/verdicts/<int:verdict_id>", methods=["DELETE"])
+    def api_delete_verdict(verdict_id: int) -> Response:
+        """Delete a verdict by ID.
+
+        Cascades to delete associated artifacts and alerts rows.
+        """
+        conn = _get_conn()
+        deleted = queries.delete_verdict(conn, verdict_id)
+        if deleted:
+            log.info("verdict %d deleted", verdict_id)
+            return jsonify({"status": "deleted", "id": verdict_id}), 200
+        return jsonify({"error": "verdict not found"}), 404
 
     return app
 

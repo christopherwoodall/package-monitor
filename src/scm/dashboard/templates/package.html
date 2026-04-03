@@ -61,7 +61,7 @@
         </td>
         <td class="px-4 py-2">
           <div class="flex items-center gap-3">
-            {% if row.report_path %}
+            {% if row.report_path and row.report_path.startswith('/') %}
             <button class="view-report text-base leading-none hover:opacity-70 transition"
                     title="View diff report"
                     data-path="{{ row.report_path }}">📄</button>
@@ -88,6 +88,10 @@
             {% else %}
             <span class="text-base leading-none opacity-20" title="No agent log available">📋</span>
             {% endif %}
+
+            <button class="delete-btn text-base leading-none hover:opacity-70 transition"
+                    title="Delete this scan"
+                    data-verdict-id="{{ row.verdict_id }}">🗑️</button>
           </div>
         </td>
       </tr>
@@ -247,6 +251,34 @@ document.querySelectorAll('.rescan-btn').forEach(btn => {
     } else {
       const data = await resp.json().catch(() => ({}));
       setForceStatus(data.error || `Error ${resp.status}`, 'text-red-400');
+    }
+  });
+});
+
+// ── Delete scan ───────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.delete-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const verdictId = btn.dataset.verdictId;
+    const version = btn.closest('tr').querySelector('td:nth-child(2)').textContent.trim();
+
+    if (!confirm(`Delete scan #${verdictId} for version ${version}?\n\nThis will remove the scan record and associated data. This action cannot be undone.`)) {
+      return;
+    }
+
+    const resp = await fetch(`/api/verdicts/${verdictId}`, {
+      method: 'DELETE',
+    });
+
+    if (resp.status === 200) {
+      // Row will disappear after reload; highlight it briefly then refresh
+      btn.closest('tr').style.opacity = '0.3';
+      window.location.reload();
+    } else if (resp.status === 404) {
+      alert('Scan not found. It may have already been deleted.');
+    } else {
+      const data = await resp.json().catch(() => ({}));
+      alert(data.error || `Failed to delete (Error ${resp.status})`);
     }
   });
 });

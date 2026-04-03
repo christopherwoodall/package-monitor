@@ -162,3 +162,26 @@ def test_local_notifier_includes_sha256_in_report(tmp_path, mocker):
     content = Path(alert.detail).read_text()
     assert "old_sha256_hash" in content
     assert "new_sha256_hash" in content
+
+
+def test_local_notifier_old_artifact_none(tmp_path, mocker):
+    """Force-scans have no previous version; old_artifact is None. Must not crash."""
+    mocker.patch("scm.notifiers.local.REPORTS_ROOT", tmp_path / "reports")
+    release = _make_release(previous_version=None)
+    verdict = Verdict(
+        release=release,
+        old_artifact=None,
+        new_artifact=_make_artifact("5.0.0"),
+        result="benign",
+        confidence="high",
+        summary="first seen",
+        analysis="no prior version to compare",
+        analyzed_at=datetime.now(timezone.utc),
+    )
+    conn = _make_conn()
+    notifier = LocalNotifier()
+    alert = notifier.notify(verdict, conn)
+
+    assert alert.success is True
+    content = Path(alert.detail).read_text()
+    assert "N/A" in content

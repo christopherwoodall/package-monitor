@@ -236,6 +236,22 @@ def get_ecosystem_breakdown(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def delete_verdict(conn: sqlite3.Connection, verdict_id: int) -> bool:
+    """Delete a verdict by its ID.
+
+    Deletes associated alerts first (alerts.verdict_id has a foreign key
+    constraint to verdicts.id without ON DELETE CASCADE), then deletes
+    the verdict row.
+
+    Returns True if a row was deleted, False if no such verdict exists.
+    """
+    # Delete associated alerts first to satisfy FK constraint
+    conn.execute("DELETE FROM alerts WHERE verdict_id = ?", (verdict_id,))
+    # Now delete the verdict
+    cur = conn.execute("DELETE FROM verdicts WHERE id = ?", (verdict_id,))
+    return cur.rowcount > 0
+
+
 def get_collector_states(conn: sqlite3.Connection) -> list[dict]:
     """Return last-poll info per ecosystem from the collector_state table.
 

@@ -17,6 +17,12 @@ from typing import TYPE_CHECKING, Deque
 from scm import db as db_module
 from scm import orchestrator
 from scm import plugins
+from scm.dashboard.url_parser import (
+    PackageNotFoundError,
+    ParsedPackageURL,
+    UnsupportedURLError,
+    parse_package_url,
+)
 from scm.models import Release
 
 if TYPE_CHECKING:
@@ -322,6 +328,74 @@ class ScanManager:
             self._threads.append(t)
         t.start()
         return True
+
+    def force_scan_url(
+        self,
+        db_path: Path,
+        url: str,
+        workers: int = 4,
+        analyze_timeout: int = 300,
+        notifier_names: list[str] | None = None,
+        analyzer_model: str | None = None,
+        analyzer_prompt: str | None = None,
+        enabled_scanners: list[str] | None = None,
+        scanner_config: dict | None = None,
+    ) -> ParsedPackageURL:
+        """Parse *url*, resolve ecosystem/package/version, then force-scan it.
+
+        This is a thin wrapper around :meth:`force_scan_package` that adds
+        URL parsing and version resolution before delegating.
+
+        Args:
+            db_path:          Path to the SQLite database.
+            url:              Any supported package registry URL.
+            workers:          Parallel release-processing threads.
+            analyze_timeout:  Per-release opencode timeout in seconds.
+            notifier_names:   Notifiers to use (default: ["local"]).
+            analyzer_model:   If set, passed as ``--model`` to opencode.
+            analyzer_prompt:  If set, overrides the default analysis prompt.
+            enabled_scanners: Names of scanners to enable.
+            scanner_config:   Per-scanner configuration dicts.
+
+        Returns:
+            A :class:`ParsedPackageURL` describing what was submitted for scanning.
+
+        Raises:
+            UnsupportedURLError:  URL is not a supported registry.
+            PackageNotFoundError: Registry returned 404 / no version available.
+            RuntimeError:         A scan is already running.
+        """
+        parsed = parse_package_url(
+            url
+        )  # may raise UnsupportedURLError / PackageNotFoundError
+
+        log.info(
+            "force_scan_url: %s → %s/%s@%s (resolved_from=%s)",
+            url,
+            parsed.ecosystem,
+            parsed.package,
+            parsed.version,
+            parsed.resolved_from,
+        )
+
+        started = self.force_scan_package(
+            db_path=db_path,
+            ecosystem=parsed.ecosystem,
+            package=parsed.package,
+            version=parsed.version,
+            workers=workers,
+            analyze_timeout=analyze_timeout,
+            notifier_names=notifier_names,
+            analyzer_model=analyzer_model,
+            analyzer_prompt=analyzer_prompt,
+            enabled_scanners=enabled_scanners,
+            scanner_config=scanner_config,
+        )
+
+        if not started:
+            raise RuntimeError("A scan is already running")
+
+        return parsed
 
     def status(self) -> dict:
         """Return a JSON-serialisable status snapshot."""

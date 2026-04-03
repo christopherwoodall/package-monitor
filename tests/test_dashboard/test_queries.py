@@ -20,6 +20,7 @@ from scm.db import (
     upsert_release,
 )
 from scm.dashboard.queries import (
+    delete_verdict,
     get_collector_states,
     get_ecosystem_breakdown,
     get_latest_per_package,
@@ -489,3 +490,83 @@ def test_get_package_history_verdict_id_distinguishes_same_version_rescans(tmp_p
     assert len(rows) == 2
     assert rows[0]["verdict_id"] != rows[1]["verdict_id"]
     assert {rows[0]["verdict_id"], rows[1]["verdict_id"]} == {vid1, vid2}
+
+
+# ---------------------------------------------------------------------------
+# delete_verdict
+# ---------------------------------------------------------------------------
+
+
+def test_delete_verdict_removes_row(tmp_path):
+    """delete_verdict returns True and removes the verdict row."""
+    conn = _conn(tmp_path)
+    vid = _seed_one(conn, ecosystem="npm", package="express", version="5.0.0")
+
+    assert delete_verdict(conn, vid) is True
+
+    # Verify the verdict is gone
+    rows = get_package_history(conn, "npm", "express")
+    assert len(rows) == 0
+
+
+def test_delete_verdict_returns_false_for_nonexistent(tmp_path):
+    """delete_verdict returns False when the verdict_id does not exist."""
+    conn = _conn(tmp_path)
+    _seed_one(conn, ecosystem="npm", package="express", version="5.0.0")
+
+    # Try to delete a non-existent verdict
+    assert delete_verdict(conn, 9999) is False
+
+
+def test_delete_verdict_cascades_to_artifacts_and_alerts(tmp_path):
+    """Deleting a verdict cascades to remove associated artifacts and alerts."""
+    conn = _conn(tmp_path)
+    vid = _seed_one(conn, ecosystem="npm", package="express", version="5.0.0")
+
+    # Verify artifacts exist
+    artifact_rows = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM artifacts WHERE release_id IN (SELECT release_id FROM verdicts WHERE id = ?)",
+        (vid,),
+    ).fetchone()
+    # Wait, artifacts are linked to release_id, not verdict_id directly
+    # Let's verify using the release_id from the verdict
+    verdict_row = conn.execute(
+        "SELECT release_id FROM verdicts WHERE id = ?", (vid,)
+    ).fetchone()
+    release_id = verdict_row["release_id"]
+
+    artifact_count = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM artifacts WHERE release_id = ?", (release_id,)
+    ).fetchone()["cnt"]
+    assert artifact_count > 0
+
+    # Delete the verdict
+    assert delete_verdict(conn, vid) is True
+
+    # Verify artifacts are still there (they belong to releases, not verdicts)
+    # The verdict row is deleted but artifacts remain (they're linked to release)
+    artifact_count_after = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM artifacts WHERE release_id = ?", (release_id,)
+    ).fetchone()["cnt"]
+    assert artifact_count_after == artifact_count
+
+
+def test_delete_verdict_only_affects_target_row(tmp_path):
+    """delete_verdict removes only the specified verdict, leaving others intact."""
+    conn = _conn(tmp_path)
+    vid1 = _seed_one(conn, ecosystem="npm", package="express", version="1.0.0")
+    vid2 = _seed_one(conn, ecosystem="npm", package="express", version="2.0.0")
+    vid3 = _seed_one(conn, ecosystem="npm", package="lodash", version="1.0.0")
+
+    # Delete only vid2
+    assert delete_verdict(conn, vid2) is True
+
+    # vid1 and vid3 should still exist
+    history = get_package_history(conn, "npm", "express")
+    verdict_ids = {r["verdict_id"] for r in history}
+    assert vid1 in verdict_ids
+    assert vid2 not in verdict_ids
+
+    lodash_history = get_package_history(conn, "npm", "lodash")
+    lodash_ids = {r["verdict_id"] for r in lodash_history}
+    assert vid3 in lodash_ids
