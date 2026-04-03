@@ -6,6 +6,7 @@ No business logic lives here — only SQL.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 
@@ -192,6 +193,7 @@ def get_package_history(
         SELECT
             v.id          AS verdict_id,
             r.package, r.version, r.ecosystem, r.rank,
+            r.metadata_json,
             v.result, v.confidence, v.summary, v.analyzed_at,
             old_a.sha256  AS old_sha256,
             new_a.sha256  AS new_sha256,
@@ -212,7 +214,21 @@ def get_package_history(
         (ecosystem, package),
     ).fetchall()
 
-    return [dict(r) for r in rows]
+    results = []
+    for r in rows:
+        row_dict = dict(r)
+        # Parse metadata JSON
+        metadata_json = row_dict.pop("metadata_json", None)
+        if metadata_json:
+            try:
+                row_dict["metadata"] = json.loads(metadata_json)
+            except json.JSONDecodeError:
+                row_dict["metadata"] = {}
+        else:
+            row_dict["metadata"] = {}
+        results.append(row_dict)
+
+    return results
 
 
 def get_ecosystem_breakdown(conn: sqlite3.Connection) -> list[dict]:

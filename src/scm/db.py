@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS releases (
     previous_version TEXT,
     rank             INTEGER NOT NULL,
     discovered_at    TEXT    NOT NULL,
+    metadata_json    TEXT,  -- Registry metadata (release_date, author, license, etc.)
     UNIQUE(ecosystem, package, version)
 );
 
@@ -118,6 +119,11 @@ def init_db(path: Path) -> sqlite3.Connection:
         conn.execute("ALTER TABLE verdicts ADD COLUMN opencode_log_path TEXT")
     except sqlite3.OperationalError:
         pass  # column already exists
+    # Non-destructive migration: add metadata_json to releases if it doesn't exist yet
+    try:
+        conn.execute("ALTER TABLE releases ADD COLUMN metadata_json TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     # Non-destructive migration: add UNIQUE(release_id, role) to artifacts if
     # not present.  SQLite does not support ADD CONSTRAINT, so we do this via
     # a CREATE UNIQUE INDEX which is a no-op if the index already exists.
@@ -135,8 +141,8 @@ def upsert_release(conn: sqlite3.Connection, release: Release) -> int:
         cur = conn.execute(
             """
             INSERT INTO releases
-                (ecosystem, package, version, previous_version, rank, discovered_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (ecosystem, package, version, previous_version, rank, discovered_at, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 release.ecosystem,
@@ -145,6 +151,7 @@ def upsert_release(conn: sqlite3.Connection, release: Release) -> int:
                 release.previous_version,
                 release.rank,
                 release.discovered_at.isoformat(),
+                json.dumps(release.metadata) if release.metadata else None,
             ),
         )
         release_id: int = cur.lastrowid  # type: ignore[assignment]

@@ -70,6 +70,24 @@ def create_app(
     app.config["CONFIG_PATH"] = config_path or Path("config.yaml")
 
     # ------------------------------------------------------------------
+    # Template filters
+    # ------------------------------------------------------------------
+
+    from datetime import datetime
+
+    @app.template_filter("format_datetime")
+    def format_datetime_filter(value: str | None) -> str:
+        """Format ISO8601 datetime string as human-readable date."""
+        if not value:
+            return "N/A"
+        try:
+            # Handle ISO8601 with Z suffix or timezone
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt.strftime("%Y-%m-%d %H:%M UTC")
+        except (ValueError, AttributeError):
+            return str(value)[:16]  # Fallback: truncate to reasonable length
+
+    # ------------------------------------------------------------------
     # Per-request DB connection
     # ------------------------------------------------------------------
 

@@ -15,6 +15,9 @@ class Release:
     previous_version: str | None
     rank: int
     discovered_at: datetime  # UTC
+    metadata: dict | None = (
+        None  # Registry metadata (release_date, author, license, etc.)
+    )
 
 
 @dataclass

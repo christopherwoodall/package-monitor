@@ -43,6 +43,30 @@ PYPI_SERIALS_PER_DAY = 28_880
 PYPI_GAP_RESET_THRESHOLD = 200_000  # ~7 days of serials
 
 
+def _extract_metadata(meta: dict) -> dict:
+    """Extract registry metadata from PyPI JSON API response."""
+    info = meta.get("info", {})
+    files = meta.get("urls", [])
+
+    # Get release date from first file's upload time
+    release_date = None
+    for f in files:
+        if f.get("packagetype") == "sdist":
+            release_date = f.get("upload_time_iso_8601") or f.get("upload_time")
+            break
+
+    return {
+        "release_date": release_date,  # ISO8601 timestamp
+        "author": info.get("author"),
+        "author_email": info.get("author_email"),
+        "license": info.get("license"),
+        "summary": info.get("summary"),
+        "home_page": info.get("home_page"),
+        "project_urls": info.get("project_urls"),
+        "requires_python": info.get("requires_python"),
+    }
+
+
 class PypiCollector(Collector):
     ecosystem = "pypi"
 
@@ -213,6 +237,7 @@ class PypiCollector(Collector):
                 continue
 
             canonical_name: str = meta.get("info", {}).get("name", pkg_name)
+            metadata = _extract_metadata(meta)
 
             yield Release(
                 ecosystem="pypi",
@@ -221,6 +246,7 @@ class PypiCollector(Collector):
                 previous_version=None,
                 rank=rank,
                 discovered_at=datetime.now(timezone.utc),
+                metadata=metadata,
             )
             yielded += 1
 

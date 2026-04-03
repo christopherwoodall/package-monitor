@@ -33,6 +33,7 @@
       <tr class="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
         <th class="px-4 py-2 text-left">Scan #</th>
         <th class="px-4 py-2 text-left">Version</th>
+        <th class="px-4 py-2 text-left">Released</th>
         <th class="px-4 py-2 text-left">Result</th>
         <th class="px-4 py-2 text-left">Confidence</th>
         <th class="px-4 py-2 text-left">Summary</th>
@@ -52,6 +53,16 @@
           data-idx="{{ loop.index0 }}">
         <td class="px-4 py-2 text-gray-600 text-xs font-mono">#{{ row.verdict_id }}</td>
         <td class="px-4 py-2 text-gray-200 font-semibold">{{ row.version }}</td>
+        <td class="px-4 py-2 text-gray-400 text-xs">
+          {% if row.metadata and row.metadata.release_date %}
+          <span class="metadata-tooltip cursor-help border-b border-dotted border-gray-600"
+                data-metadata='{{ row.metadata | tojson | safe }}'>
+            {{ row.metadata.release_date | format_datetime }}
+          </span>
+          {% else %}
+          <span class="text-gray-600 italic">N/A</span>
+          {% endif %}
+        </td>
         <td class="px-4 py-2">
           <span class="text-xs px-2 py-0.5 rounded font-semibold {{ BADGE.get(row.result, 'bg-gray-700 text-gray-400') }}">
             {{ row.result }}
@@ -124,6 +135,49 @@ Loading…</pre>
 
 {% endif %}
 
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* Sexy metadata tooltip - uses fixed positioning to escape overflow containers */
+  .metadata-tooltip {
+    position: relative;
+  }
+  #global-tooltip {
+    position: fixed;
+    background: rgba(17, 24, 39, 0.98);
+    border: 1px solid #374151;
+    border-radius: 8px;
+    padding: 12px 16px;
+    min-width: 280px;
+    max-width: 400px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    z-index: 2147483647;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #e5e7eb;
+    white-space: pre-wrap;
+    word-break: break-word;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+    display: none;
+  }
+  #global-tooltip.visible {
+    opacity: 1;
+    display: block;
+  }
+  #global-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(17, 24, 39, 0.98);
+  }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -287,5 +341,60 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
     }
   });
 });
+
+// ── Metadata tooltip (global fixed-positioned to escape overflow containers) ───
+
+(function() {
+  // Create global tooltip element
+  const tooltip = document.createElement('div');
+  tooltip.id = 'global-tooltip';
+  document.body.appendChild(tooltip);
+
+  // Format JSON for display
+  function formatMetadata(jsonStr) {
+    try {
+      const data = JSON.parse(jsonStr);
+      // Pretty print with indentation
+      return JSON.stringify(data, null, 2);
+    } catch (e) {
+      return jsonStr;
+    }
+  }
+
+  // Position and show tooltip
+  function showTooltip(el) {
+    const metadata = el.dataset.metadata;
+    if (!metadata) return;
+
+    tooltip.textContent = formatMetadata(metadata);
+    tooltip.classList.add('visible');
+
+    const rect = el.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+
+    // Center above the element
+    let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+    let top = rect.top - tooltipRect.height - 8;
+
+    // Keep within viewport
+    left = Math.max(8, Math.min(left, window.innerWidth - tooltipRect.width - 8));
+    top = Math.max(8, top);
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+  }
+
+  function hideTooltip() {
+    tooltip.classList.remove('visible');
+  }
+
+  // Attach listeners to all metadata tooltips
+  document.querySelectorAll('.metadata-tooltip').forEach(el => {
+    el.addEventListener('mouseenter', () => showTooltip(el));
+    el.addEventListener('mouseleave', hideTooltip);
+    el.addEventListener('focus', () => showTooltip(el));
+    el.addEventListener('blur', hideTooltip);
+  });
+})();
 </script>
 {% endblock %}

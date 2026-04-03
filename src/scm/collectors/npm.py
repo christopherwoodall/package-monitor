@@ -137,12 +137,43 @@ class NpmCollector(Collector):
             data = json.loads(resp.read())
         return data["results"], data["last_seq"]
 
-    def _detect_new_versions(self, package: str, since_epoch: float) -> list[str]:
-        """Return versions published after since_epoch (Unix timestamp), oldest first."""
-        since_iso = datetime.fromtimestamp(since_epoch, tz=timezone.utc).isoformat()
+    def _fetch_packument(self, package: str) -> dict:
+        """Fetch the full packument for a package from the npm registry."""
         encoded = urllib.parse.quote(package, safe="")
         with urllib.request.urlopen(f"{REGISTRY_URL}/{encoded}", timeout=30) as resp:  # noqa: S310
-            packument = json.loads(resp.read())
+            return json.loads(resp.read())
+
+    def _extract_metadata(self, packument: dict, version: str) -> dict:
+        """Extract registry metadata for a specific version from the packument."""
+        time_map: dict[str, str] = packument.get("time", {})
+        release_date = time_map.get(version)
+
+        # Get version-specific metadata if available
+        version_info = packument.get("versions", {}).get(version, {})
+        author_info = version_info.get("author", {})
+        author = (
+            author_info.get("name") if isinstance(author_info, dict) else author_info
+        )
+
+        return {
+            "release_date": release_date,  # ISO8601 timestamp
+            "author": author,
+            "license": version_info.get("license") or packument.get("license"),
+            "homepage": packument.get("homepage"),
+            "repository": packument.get("repository", {}).get("url"),
+            "description": version_info.get("description")
+            or packument.get("description"),
+        }
+
+    def _detect_new_versions(
+        self, package: str, since_epoch: float
+    ) -> list[tuple[str, dict]]:
+        """Return versions published after since_epoch (Unix timestamp), oldest first.
+
+        Returns list of (version, metadata) tuples.
+        """
+        since_iso = datetime.fromtimestamp(since_epoch, tz=timezone.utc).isoformat()
+        packument = self._fetch_packument(package)
 
         time_map: dict[str, str] = packument.get("time", {})
         new_versions = []
@@ -150,9 +181,10 @@ class NpmCollector(Collector):
             if ver in ("created", "modified"):
                 continue
             if ts > since_iso:
-                new_versions.append((ver, ts))
-        new_versions.sort(key=lambda x: x[1])
-        return [v for v, _ in new_versions]
+                metadata = self._extract_metadata(packument, ver)
+                new_versions.append((ver, metadata))
+        new_versions.sort(key=lambda x: x[1].get("release_date", ""))
+        return new_versions
 
     def _get_previous_version(self, package: str, new_version: str) -> str | None:
         """Return the version published just before new_version, or None."""
@@ -242,7 +274,7 @@ class NpmCollector(Collector):
                     log.warning("could not detect new versions for %s: %s", pkg, exc)
                     continue
                 rank = self._watchlist.get(pkg.lower(), 0)
-                for ver in new_versions:
+                for ver, metadata in new_versions:
                     log.info("new version detected  %s@%s  rank=#%d", pkg, ver, rank)
                     yield Release(
                         ecosystem="npm",
@@ -251,6 +283,7 @@ class NpmCollector(Collector):
                         previous_version=None,
                         rank=rank,
                         discovered_at=datetime.now(timezone.utc),
+                        metadata=metadata,
                     )
             self._poll_epoch = cycle_start
             return
@@ -304,7 +337,7 @@ class NpmCollector(Collector):
                 if self._watchlist is not None
                 else 0
             )
-            for ver in new_versions:
+            for ver, metadata in new_versions:
                 if self._new_limit > 0 and yielded >= self._new_limit:
                     log.info(
                         "npm new_limit=%d reached — stopping early", self._new_limit
@@ -320,6 +353,7 @@ class NpmCollector(Collector):
                     previous_version=None,  # resolved by orchestrator
                     rank=rank,
                     discovered_at=datetime.now(timezone.utc),
+                    metadata=metadata,
                 )
                 yielded += 1
 
