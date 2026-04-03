@@ -1,0 +1,8 @@
+.venv
+.egg
+node_modules
+.git
+.DS_Store
+dist/
+build/
+*.log
