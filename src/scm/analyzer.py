@@ -250,12 +250,14 @@ def analyze(
             except Exception as exc:  # noqa: BLE001
                 log.warning("scanner %r raised unexpectedly: %s", scanner.name, exc)
 
-        if sections:
-            findings_text = "\n\n".join(sections)
-            (workspace / "scanner_findings.md").write_text(
-                findings_text, encoding="utf-8"
-            )
-            log.debug("wrote scanner_findings.md (%d section(s))", len(sections))
+        # Always write scanner_findings.md so opencode can read it
+        findings_text = (
+            "\n\n".join(sections)
+            if sections
+            else "# Scanner Findings\n\nNo scanner output."
+        )
+        (workspace / "scanner_findings.md").write_text(findings_text, encoding="utf-8")
+        log.debug("wrote scanner_findings.md (%d section(s))", len(sections))
 
         # Copy new release tree into workspace so opencode can examine
         # the full source, not just the scanner findings.

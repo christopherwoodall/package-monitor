@@ -57,8 +57,7 @@ class BinaryStringsScanner(Scanner):
         added_files: list[str],
     ) -> str:
         if shutil.which("strings") is None:
-            log.debug("binary_strings: 'strings' binary not found — skipping")
-            return ""
+            raise RuntimeError("binary_strings: 'strings' binary not found in PATH")
 
         targets = sorted(set(changed_files) | set(added_files))
         sections: list[str] = []
@@ -77,10 +76,16 @@ class BinaryStringsScanner(Scanner):
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    check=True,
                 )
-            except Exception as exc:  # noqa: BLE001
-                log.warning("binary_strings: strings failed on %s: %s", rel, exc)
-                continue
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    f"binary_strings: 'strings' command failed on {rel}: {exc}"
+                ) from exc
+            except OSError as exc:
+                raise RuntimeError(
+                    f"binary_strings: could not run 'strings' on {rel}: {exc}"
+                ) from exc
 
             raw_lines = result.stdout.splitlines()
             if not raw_lines:
@@ -103,7 +108,11 @@ class BinaryStringsScanner(Scanner):
             sections.append(caption)
 
         if not sections:
-            return ""
+            return (
+                "## Binary Strings\n\n"
+                f"No binary files with extractable strings found "
+                f"(strings -n {self._min_length})."
+            )
 
         header = (
             "## Binary Strings\n\n"

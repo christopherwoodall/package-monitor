@@ -517,33 +517,33 @@ def test_analyze_scanner_exception_does_not_propagate(tmp_path, mocker):
     assert verdict.result == "benign"
 
 
-def test_analyze_no_scanner_findings_does_not_write_file(tmp_path, mocker):
-    """When all scanners return '', scanner_findings.md must not be written."""
+def test_analyze_always_writes_scanner_findings_file(tmp_path, mocker):
+    """scanner_findings.md must always be written, even when scanners return empty."""
     from scm.scanners import Scanner
-
-    fake_result = MagicMock()
-    fake_result.returncode = 0
-    fake_result.stdout = "Verdict: benign\nConfidence: high\nSummary: ok\n"
-    fake_result.stderr = ""
-    written_workspace: list[Path] = []
-
-    def capturing_run(args, **kwargs):
-        cwd = kwargs.get("cwd", "")
-        ws = Path(cwd)
-        written_workspace.append(ws)
-        # findings file must NOT exist at call time
-        assert not (ws / "scanner_findings.md").exists()
-        return fake_result
-
-    mocker.patch("subprocess.run", side_effect=capturing_run)
-    mocker.patch("scm.analyzer.Path.home", return_value=Path("/nonexistent-home"))
 
     mock_scanner = MagicMock(spec=Scanner)
     mock_scanner.name = "empty_scanner"
-    mock_scanner.scan.return_value = ""
+    mock_scanner.scan.return_value = ""  # empty result
 
     new_root = tmp_path / "new_root"
     new_root.mkdir()
+
+    # Capture content inside the mock since workspace gets cleaned up after analyze()
+    captured_content: list[str] = []
+
+    from scm import analyzer as analyzer_module
+
+    def mock_run_opencode(workspace, timeout=300, model=None, prompt=None):
+        ws_path = Path(workspace)
+        findings_path = ws_path / "scanner_findings.md"
+        # File must exist when opencode is called
+        assert findings_path.exists(), (
+            "scanner_findings.md should exist when opencode is called"
+        )
+        captured_content.append(findings_path.read_text())
+        return "Verdict: benign\nConfidence: high\nSummary: ok\n", None
+
+    mocker.patch.object(analyzer_module, "run_opencode", side_effect=mock_run_opencode)
 
     analyze(
         release=_make_release(),
@@ -556,6 +556,9 @@ def test_analyze_no_scanner_findings_does_not_write_file(tmp_path, mocker):
         scanners=[mock_scanner],
     )
     mock_scanner.scan.assert_called_once()
+    # Verify the file was written even with empty content
+    assert len(captured_content) == 1
+    assert "No scanner output" in captured_content[0]
 
 
 # ---------------------------------------------------------------------------

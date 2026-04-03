@@ -81,7 +81,11 @@ class Base64StringsScanner(Scanner):
                 log.warning("base64_strings: error reading %s: %s", rel, exc)
 
         if not rows:
-            return ""
+            return (
+                "## Base64 Strings\n\n"
+                f"No Base64-encoded strings detected in changed/added files "
+                f"(min_length={self._min_length})."
+            )
 
         lines = [
             "## Base64 Strings\n",

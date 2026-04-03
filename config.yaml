@@ -50,6 +50,8 @@ analyzer:
     Summary: <one sentence ≤ 120 chars, written as a security alert>
     ```
 
+    Include file names and code snippets in your reasoning to support your verdict. Be explicit about what you can and cannot verify based on the scanner findings and the presence or absence of the full source tree.
+
     - Use **malicious/high** only when you are certain malicious code was added.
     - Use **unknown** when behavior is suspicious but intent cannot be confirmed.
     - Use **benign** for clean changes. A new feature touching network code is not automatically suspicious.

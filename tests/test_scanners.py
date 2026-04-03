@@ -35,17 +35,17 @@ def _write_binary(path: Path, content: bytes) -> None:
 
 
 class TestBase64StringsScanner:
-    def test_returns_empty_when_no_targets(self, tmp_path):
+    def test_returns_message_when_no_targets(self, tmp_path):
         scanner = Base64StringsScanner()
         result = scanner.scan(None, tmp_path, [], [])
-        assert result == ""
+        assert "No Base64-encoded strings detected" in result
 
-    def test_returns_empty_when_no_matches(self, tmp_path):
+    def test_returns_message_when_no_matches(self, tmp_path):
         rel = "foo.py"
         _write_text(tmp_path / rel, "# just a normal python file\nx = 1\n")
         scanner = Base64StringsScanner()
         result = scanner.scan(None, tmp_path, [rel], [])
-        assert result == ""
+        assert "No Base64-encoded strings detected" in result
 
     def test_finds_long_base64_in_changed_file(self, tmp_path):
         # 80 chars of valid base64 characters — well above default min_length=60
@@ -73,7 +73,7 @@ class TestBase64StringsScanner:
         _write_text(tmp_path / rel, f'data = "{b64_blob}"\n')
         scanner = Base64StringsScanner()
         result = scanner.scan(None, tmp_path, [], [])  # neither changed nor added
-        assert result == ""
+        assert "No Base64-encoded strings detected" in result
 
     def test_short_base64_not_flagged(self, tmp_path):
         # 10 chars — below default min_length=60
@@ -82,7 +82,7 @@ class TestBase64StringsScanner:
         _write_text(tmp_path / rel, f'const x = "{short_blob}";\n')
         scanner = Base64StringsScanner()
         result = scanner.scan(None, tmp_path, [rel], [])
-        assert result == ""
+        assert "No Base64-encoded strings detected" in result
 
     def test_configure_changes_min_length(self, tmp_path):
         # blob of 20 chars — should be flagged after configure(min_length=15)
@@ -122,12 +122,12 @@ class TestBase64StringsScanner:
         _write_binary(tmp_path / rel, bytes(range(256)))
         scanner = Base64StringsScanner()
         result = scanner.scan(None, tmp_path, [rel], [])
-        assert result == ""
+        assert "No Base64-encoded strings detected" in result
 
     def test_missing_file_does_not_crash(self, tmp_path):
         scanner = Base64StringsScanner()
         result = scanner.scan(None, tmp_path, ["nonexistent.py"], [])
-        assert result == ""
+        assert "No Base64-encoded strings detected" in result
 
     def test_output_is_markdown_table(self, tmp_path):
         blob = "A" * 80
@@ -145,19 +145,19 @@ class TestBase64StringsScanner:
 
 
 class TestBinaryStringsScanner:
-    def test_returns_empty_when_strings_not_available(self, tmp_path, mocker):
+    def test_raises_when_strings_not_available(self, tmp_path, mocker):
         mocker.patch("scm.scanners.binary_strings.shutil.which", return_value=None)
         scanner = BinaryStringsScanner()
-        result = scanner.scan(None, tmp_path, ["some_binary"], [])
-        assert result == ""
+        with pytest.raises(RuntimeError, match="strings.*not found"):
+            scanner.scan(None, tmp_path, ["some_binary"], [])
 
-    def test_returns_empty_when_no_targets(self, tmp_path, mocker):
+    def test_returns_message_when_no_targets(self, tmp_path, mocker):
         mocker.patch(
             "scm.scanners.binary_strings.shutil.which", return_value="/usr/bin/strings"
         )
         scanner = BinaryStringsScanner()
         result = scanner.scan(None, tmp_path, [], [])
-        assert result == ""
+        assert "No binary files with extractable strings found" in result
 
     def test_skips_text_files(self, tmp_path, mocker):
         mocker.patch(
@@ -169,7 +169,7 @@ class TestBinaryStringsScanner:
         scanner = BinaryStringsScanner()
         result = scanner.scan(None, tmp_path, [rel], [])
         mock_run.assert_not_called()
-        assert result == ""
+        assert "No binary files with extractable strings found" in result
 
     def test_runs_strings_on_binary_file(self, tmp_path, mocker):
         mocker.patch(
@@ -190,7 +190,7 @@ class TestBinaryStringsScanner:
         assert rel in result
         assert "curl" in result
 
-    def test_returns_empty_when_strings_output_empty(self, tmp_path, mocker):
+    def test_returns_message_when_strings_output_empty(self, tmp_path, mocker):
         mocker.patch(
             "scm.scanners.binary_strings.shutil.which", return_value="/usr/bin/strings"
         )
@@ -199,12 +199,14 @@ class TestBinaryStringsScanner:
 
         fake_result = MagicMock()
         fake_result.stdout = ""
+        fake_result.returncode = 0
         mocker.patch(
             "scm.scanners.binary_strings.subprocess.run", return_value=fake_result
         )
         scanner = BinaryStringsScanner()
         result = scanner.scan(None, tmp_path, [rel], [])
-        assert result == ""
+        # When strings output is empty, we still get a message (no sections created)
+        assert "No binary files with extractable strings found" in result
 
     def test_configure_max_lines_per_file_caps_per_file(self, tmp_path, mocker):
         mocker.patch(
@@ -244,7 +246,7 @@ class TestBinaryStringsScanner:
         result = scanner.scan(None, tmp_path, ["a.so", "b.so", "c.so"], [])
         assert "Total output capped" in result
 
-    def test_subprocess_failure_does_not_crash(self, tmp_path, mocker):
+    def test_subprocess_failure_raises_error(self, tmp_path, mocker):
         mocker.patch(
             "scm.scanners.binary_strings.shutil.which", return_value="/usr/bin/strings"
         )
@@ -256,9 +258,8 @@ class TestBinaryStringsScanner:
             side_effect=OSError("strings crashed"),
         )
         scanner = BinaryStringsScanner()
-        result = scanner.scan(None, tmp_path, [rel], [])
-        # Should not raise; returns '' because no sections were collected
-        assert result == ""
+        with pytest.raises(RuntimeError, match="could not run 'strings'"):
+            scanner.scan(None, tmp_path, [rel], [])
 
     def test_missing_file_does_not_crash(self, tmp_path, mocker):
         mocker.patch(
@@ -266,7 +267,7 @@ class TestBinaryStringsScanner:
         )
         scanner = BinaryStringsScanner()
         result = scanner.scan(None, tmp_path, ["ghost.so"], [])
-        assert result == ""
+        assert "No binary files with extractable strings found" in result
 
     def test_configure_min_length_is_forwarded(self, tmp_path, mocker):
         mocker.patch(
@@ -294,10 +295,10 @@ class TestBinaryStringsScanner:
 
 
 class TestDiffScanner:
-    def test_returns_empty_when_no_old_root(self, tmp_path):
+    def test_returns_message_when_no_old_root(self, tmp_path):
         scanner = DiffScanner()
         result = scanner.scan(None, tmp_path, [], [])
-        assert result == ""
+        assert "No previous version available" in result
         assert scanner.last_truncated is False
 
     def test_no_changes_produces_summary_table(self, tmp_path):

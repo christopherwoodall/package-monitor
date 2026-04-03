@@ -65,9 +65,13 @@ class DiffScanner(Scanner):
             Markdown string with the diff report, or '' if old_root is None.
         """
         if old_root is None:
-            log.debug("diff scanner: no old_root — skipping diff")
+            log.debug("diff scanner: no old_root — force-scan with no previous version")
             self.last_truncated = False
-            return ""
+            return (
+                "## Diff Scanner\n\n"
+                "**Note:** No previous version available for comparison. "
+                "This appears to be an initial release or force-scan without historical context."
+            )
 
         old_files = collect_files(old_root)
         new_files = collect_files(new_root)
