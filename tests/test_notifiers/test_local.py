@@ -11,7 +11,6 @@ import pytest
 from scm.models import Alert, Release, StoredArtifact, Verdict
 from scm.notifiers.local import LocalNotifier
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

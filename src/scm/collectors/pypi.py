@@ -71,9 +71,9 @@ class PypiCollector(Collector):
     ecosystem = "pypi"
 
     def __init__(self) -> None:
-        self._watchlist: (
-            dict[str, int] | None
-        ) = {}  # name → rank (1-based); None = all packages
+        self._watchlist: dict[str, int] | None = (
+            {}
+        )  # name → rank (1-based); None = all packages
         self._last_serial: int = 0
         self._new_limit: int = 0  # 0 = unlimited; only applied when _watchlist is None
 
@@ -97,7 +97,9 @@ class PypiCollector(Collector):
             return
         log.info("loading PyPI top-%d watchlist", top_n)
         try:
-            with urllib.request.urlopen(PYPI_TOP_PACKAGES_URL, timeout=30) as resp:  # noqa: S310
+            with urllib.request.urlopen(
+                PYPI_TOP_PACKAGES_URL, timeout=30
+            ) as resp:  # noqa: S310
                 data = json.loads(resp.read())
         except Exception as exc:
             raise WatchlistError(

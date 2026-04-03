@@ -13,7 +13,6 @@ from scm.scanners.base64_strings import Base64StringsScanner
 from scm.scanners.binary_strings import BinaryStringsScanner
 from scm.scanners.diff import DiffScanner
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

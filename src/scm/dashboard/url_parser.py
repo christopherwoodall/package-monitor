@@ -103,17 +103,13 @@ _NPM_PACKAGE_PATH = re.compile(
 
 # Matches  /package/@scope/name/versions/{ver}  (legacy npmjs URL)
 _NPM_PACKAGE_VERSIONS_PATH = re.compile(
-    r"^/package/"
-    r"(?P<pkg>(?:@[^/]+/[^/]+|[^/]+))"
-    r"/versions/(?P<ver>[^/]+)/?$"
+    r"^/package/" r"(?P<pkg>(?:@[^/]+/[^/]+|[^/]+))" r"/versions/(?P<ver>[^/]+)/?$"
 )
 
 # Matches  /{pkg}  or  /{pkg}/{version}  on registry.npmjs.org
 # Scoped: /@scope/name  or  /@scope/name/ver
 _NPM_REGISTRY_PATH = re.compile(
-    r"^/"
-    r"(?P<pkg>(?:@[^/]+/[^/]+|[^/]+))"
-    r"(?:/(?P<ver>[^/]+))?/?$"
+    r"^/" r"(?P<pkg>(?:@[^/]+/[^/]+|[^/]+))" r"(?:/(?P<ver>[^/]+))?/?$"
 )
 
 _NPM_HOSTS = {"www.npmjs.com", "npmjs.com", "npmjs.org"}

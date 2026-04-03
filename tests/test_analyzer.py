@@ -19,7 +19,6 @@ from scm.analyzer import (
 )
 from scm.models import Release, StoredArtifact, Verdict
 
-
 # ---------------------------------------------------------------------------
 # Module-wide fixture: skip the cleanup delay so tests stay fast
 # ---------------------------------------------------------------------------
@@ -537,9 +536,9 @@ def test_analyze_always_writes_scanner_findings_file(tmp_path, mocker):
         ws_path = Path(workspace)
         findings_path = ws_path / "scanner_findings.md"
         # File must exist when opencode is called
-        assert findings_path.exists(), (
-            "scanner_findings.md should exist when opencode is called"
-        )
+        assert (
+            findings_path.exists()
+        ), "scanner_findings.md should exist when opencode is called"
         captured_content.append(findings_path.read_text())
         return "Verdict: benign\nConfidence: high\nSummary: ok\n", None
 
@@ -580,20 +579,24 @@ def _capturing_run(workspace_snapshots: list[dict]):
             {
                 "has_new": (ws / "new").is_dir(),
                 "has_old": (ws / "old").is_dir(),
-                "new_files": sorted(
-                    str(p.relative_to(ws / "new"))
-                    for p in (ws / "new").rglob("*")
-                    if p.is_file()
-                )
-                if (ws / "new").is_dir()
-                else [],
-                "old_files": sorted(
-                    str(p.relative_to(ws / "old"))
-                    for p in (ws / "old").rglob("*")
-                    if p.is_file()
-                )
-                if (ws / "old").is_dir()
-                else [],
+                "new_files": (
+                    sorted(
+                        str(p.relative_to(ws / "new"))
+                        for p in (ws / "new").rglob("*")
+                        if p.is_file()
+                    )
+                    if (ws / "new").is_dir()
+                    else []
+                ),
+                "old_files": (
+                    sorted(
+                        str(p.relative_to(ws / "old"))
+                        for p in (ws / "old").rglob("*")
+                        if p.is_file()
+                    )
+                    if (ws / "old").is_dir()
+                    else []
+                ),
             }
         )
         r = MagicMock()
@@ -687,9 +690,9 @@ def test_analyze_smoke_canary_file_is_present_in_workspace(tmp_path, mocker):
     )
 
     snap = snapshots[0]
-    assert snap["has_new"], (
-        "Canary file missing from workspace — opencode cannot see the package source tree"
-    )
+    assert snap[
+        "has_new"
+    ], "Canary file missing from workspace — opencode cannot see the package source tree"
     assert "SMOKE_TEST.md" in snap["new_files"]
 
 

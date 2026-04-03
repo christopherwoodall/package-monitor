@@ -16,7 +16,6 @@ from scm.models import Alert, Release, StoredArtifact, Verdict
 from scm.orchestrator import _process_release, run, run_multi
 from scm.storage import DownloadError
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -39,9 +39,9 @@ class NpmCollector(Collector):
     ecosystem = "npm"
 
     def __init__(self) -> None:
-        self._watchlist: (
-            dict[str, int] | None
-        ) = {}  # name.lower() → rank (1-based); None = all packages
+        self._watchlist: dict[str, int] | None = (
+            {}
+        )  # name.lower() → rank (1-based); None = all packages
         self._last_seq: int = 0
         self._poll_epoch: float = 0.0  # Unix timestamp of last poll start
         self._new_limit: int = 0  # 0 = unlimited; only applied when _watchlist is None
@@ -82,7 +82,9 @@ class NpmCollector(Collector):
             # 2. Download the tarball
             tgz_path = tmpdir / "download-counts.tgz"
             try:
-                with urllib.request.urlopen(tarball_url, timeout=60) as resp:  # noqa: S310
+                with urllib.request.urlopen(
+                    tarball_url, timeout=60
+                ) as resp:  # noqa: S310
                     with tgz_path.open("wb") as fh:
                         for chunk in iter(lambda: resp.read(65536), b""):
                             fh.write(chunk)
@@ -140,7 +142,9 @@ class NpmCollector(Collector):
     def _fetch_packument(self, package: str) -> dict:
         """Fetch the full packument for a package from the npm registry."""
         encoded = urllib.parse.quote(package, safe="")
-        with urllib.request.urlopen(f"{REGISTRY_URL}/{encoded}", timeout=30) as resp:  # noqa: S310
+        with urllib.request.urlopen(
+            f"{REGISTRY_URL}/{encoded}", timeout=30
+        ) as resp:  # noqa: S310
             return json.loads(resp.read())
 
     def _extract_metadata(self, packument: dict, version: str) -> dict:
@@ -236,9 +240,11 @@ class NpmCollector(Collector):
                 "gap too large (%d changes) — resetting seq to HEAD %d%s",
                 gap,
                 head_seq,
-                " (first run — falling through to full-watchlist epoch scan)"
-                if is_first_run and self._watchlist is not None
-                else "",
+                (
+                    " (first run — falling through to full-watchlist epoch scan)"
+                    if is_first_run and self._watchlist is not None
+                    else ""
+                ),
             )
             self._last_seq = head_seq
             # On genuine stalls reset the epoch so we don't re-scan history.

@@ -320,9 +320,10 @@ def create_app(
         version = (data.get("version") or "").strip()
 
         if not ecosystem or not package or not version:
-            return jsonify(
-                {"error": "ecosystem, package and version are required"}
-            ), 400
+            return (
+                jsonify({"error": "ecosystem, package and version are required"}),
+                400,
+            )
 
         try:
             _cfg = load_config(app.config["CONFIG_PATH"])
@@ -355,9 +356,10 @@ def create_app(
         )
 
         if started:
-            return jsonify(
-                {"status": "started", "package": package, "version": version}
-            ), 202
+            return (
+                jsonify({"status": "started", "package": package, "version": version}),
+                202,
+            )
         return jsonify({"status": "already_running"}), 409
 
     @app.route("/api/scan/force-url", methods=["POST"])
@@ -425,15 +427,18 @@ def create_app(
         except RuntimeError:
             return jsonify({"status": "already_running"}), 409
 
-        return jsonify(
-            {
-                "status": "started",
-                "ecosystem": parsed.ecosystem,
-                "package": parsed.package,
-                "version": parsed.version,
-                "resolved_from": parsed.resolved_from,
-            }
-        ), 202
+        return (
+            jsonify(
+                {
+                    "status": "started",
+                    "ecosystem": parsed.ecosystem,
+                    "package": parsed.package,
+                    "version": parsed.version,
+                    "resolved_from": parsed.resolved_from,
+                }
+            ),
+            202,
+        )
 
     # ------------------------------------------------------------------
     # Cron / service API routes
@@ -885,8 +890,10 @@ def main(argv: list[str] | None = None) -> None:
         db_path=db_path,
         binaries_root=binaries_root,
         reports_root=reports_root,
-        config_path=Path(args.config).resolve()
-        if args.config
-        else Path("config.yaml").resolve(),
+        config_path=(
+            Path(args.config).resolve()
+            if args.config
+            else Path("config.yaml").resolve()
+        ),
     )
     app.run(host=cfg.dashboard_host, port=cfg.dashboard_port, debug=args.debug)

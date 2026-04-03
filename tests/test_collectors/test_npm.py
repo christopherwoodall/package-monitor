@@ -17,7 +17,6 @@ from scm.collectors import WatchlistError
 from scm.collectors.npm import NpmCollector
 from scm.models import Release
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

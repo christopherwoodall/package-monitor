@@ -12,7 +12,6 @@ from scm.notifiers import Notifier
 from scm.scanners import Scanner
 from scm.plugins import load_collectors, load_notifiers, load_scanners
 
-
 # ---------------------------------------------------------------------------
 # Helpers — stub Collector / Notifier for fake entry_points
 # ---------------------------------------------------------------------------

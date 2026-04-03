@@ -49,7 +49,9 @@ def _crontab_binary() -> str:
 
 def _read_crontab() -> str:
     crontab = _crontab_binary()
-    result = subprocess.run([crontab, "-l"], capture_output=True, text=True)  # noqa: S603
+    result = subprocess.run(
+        [crontab, "-l"], capture_output=True, text=True
+    )  # noqa: S603
     if result.returncode not in (0, 1):  # 1 = no crontab yet (normal)
         raise SchedulerError(f"crontab -l failed: {result.stderr.strip()}")
     return result.stdout

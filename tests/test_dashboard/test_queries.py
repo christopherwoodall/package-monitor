@@ -30,7 +30,6 @@ from scm.dashboard.queries import (
 )
 from scm.models import Alert, Release, StoredArtifact, Verdict
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

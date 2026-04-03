@@ -25,7 +25,6 @@ from scm.db import (
 )
 from scm.models import Alert, Release, StoredArtifact, Verdict
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -418,8 +417,7 @@ def test_init_db_migration_adds_opencode_log_path_column(tmp_path):
     db_file = tmp_path / "old.db"
     # Create a DB with the old verdicts schema (no opencode_log_path column)
     raw = _sqlite3.connect(str(db_file))
-    raw.execute(
-        """
+    raw.execute("""
         CREATE TABLE verdicts (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             release_id     INTEGER NOT NULL,
@@ -429,8 +427,7 @@ def test_init_db_migration_adds_opencode_log_path_column(tmp_path):
             analysis       TEXT    NOT NULL,
             analyzed_at    TEXT    NOT NULL
         )
-        """
-    )
+        """)
     raw.commit()
     raw.close()
 

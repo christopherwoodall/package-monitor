@@ -27,8 +27,7 @@ def get_stats(conn: sqlite3.Connection) -> dict:
             ecosystems: int,
         }
     """
-    row = conn.execute(
-        """
+    row = conn.execute("""
         SELECT
             COUNT(*)                                          AS total_scans,
             SUM(CASE WHEN result = 'malicious' THEN 1 ELSE 0 END) AS malicious,
@@ -36,8 +35,7 @@ def get_stats(conn: sqlite3.Connection) -> dict:
             SUM(CASE WHEN result = 'unknown'   THEN 1 ELSE 0 END) AS unknown,
             SUM(CASE WHEN result = 'error'     THEN 1 ELSE 0 END) AS error
         FROM verdicts
-        """
-    ).fetchone()
+        """).fetchone()
 
     pkg_row = conn.execute(
         "SELECT COUNT(DISTINCT package || '|' || ecosystem) AS packages_watched FROM releases"
@@ -236,8 +234,7 @@ def get_ecosystem_breakdown(conn: sqlite3.Connection) -> list[dict]:
 
     Returns list of {ecosystem, count, malicious_count}.
     """
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT
             r.ecosystem,
             COUNT(*) AS count,
@@ -246,8 +243,7 @@ def get_ecosystem_breakdown(conn: sqlite3.Connection) -> list[dict]:
         JOIN releases r ON r.id = v.release_id
         GROUP BY r.ecosystem
         ORDER BY count DESC
-        """
-    ).fetchall()
+        """).fetchall()
 
     return [dict(r) for r in rows]
 
