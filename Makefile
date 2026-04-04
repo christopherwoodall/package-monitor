@@ -43,4 +43,4 @@ lint: ## Lint the code
 .PHONY: sync
 sync: ## Sync package-monitor from remote agent using .rsync-exclude
 -    if [ ! -f .rsync-exclude ]; then echo "Error: .rsync-exclude file not found!"; exit 1; fi
--    rsync -avzP --exclude-from='.rsync-exclude' agent@192.168.0.18:/Users/agent/package-monitor/ .
+-    rsync -avzP --exclude-from='.rsync-exclude' agent:/Users/agent/package-monitor/ .
